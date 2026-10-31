@@ -257,14 +257,39 @@ app.post('/api/local-video',auth,(req,res)=>{
  if(activeWan)return failure(res,409,'A local video is already generating.');
  const prompt=clean(req.body.prompt,1000),ratio=req.body.ratio==='9:16'?'9:16':'16:9';
  if(!prompt)return failure(res,400,'Enter a video prompt');
- const item={id:id(),owner:req.user.id,engine:'local',model:'Wan2.1-T2V-1.3B',prompt,ratio,status:'running',logs:[],createdAt:new Date().toISOString()};
+ const item={id:id(),owner:req.user.id,engine:'local',model:'Wan2.1-T2V-1.3B',prompt,ratio,status:'running',logs:[],createdAt:new Date().toISOString(),stage:'Starting video engine',stepsDone:0,stepsTotal:50,progress:null};
  const folder=path.join(home,'videos');fs.mkdirSync(folder,{recursive:true});
  const output=path.join(folder,item.id+'.mp4');
  const logFile=path.join(folder,item.id+'.log');
  item.logFile=logFile;
  const logStream=fs.createWriteStream(logFile,{flags:'a'});
  let pendingSave=null;
+ const updateProgress=(chunk)=>{
+  const value=String(chunk);
+  if(/Creating WanT2V pipeline/i.test(value))item.stage='Initializing model';
+  if(/loading .*models_t5/i.test(value))item.stage='Loading text encoder';
+  if(/loading .*Wan2.1_VAE/i.test(value))item.stage='Loading video decoder';
+  if(/Creating WanModel/i.test(value))item.stage='Loading video model';
+  if(/Generating video/i.test(value)){item.stage='Generating video frames';item.generationStartedAt=Date.now();item.progress=0}
+  if(/Saving generated video|Saving video|saving.*mp4/i.test(value))item.stage='Encoding MP4';
+  // tqdm emits carriage returns, and individual writes can split a progress row.
+  const combined=(item.progressTail||'')+value;
+  const matches=[...combined.matchAll(/(\d{1,3})%\|[^\r\n]*?\|\s*(\d+)\/(\d+)\s*\[/g)];
+  if(matches.length){
+   const last=matches[matches.length-1],done=Number(last[2]),total=Number(last[3]);
+   if(total>0&&done>=0&&done<=total){
+    item.stepsDone=done;item.stepsTotal=total;item.progress=Math.round(done/total*100);
+    item.stage='Generating video frames';
+    if(done>0&&item.generationStartedAt){
+     const elapsed=(Date.now()-item.generationStartedAt)/1000;
+     item.etaSeconds=Math.max(0,Math.ceil(elapsed/done*(total-done)));
+    }
+   }
+  }
+  item.progressTail=combined.slice(-250);
+ };
  const appendLog=(level,chunk)=>{
+  updateProgress(chunk);
   const line='['+new Date().toISOString()+'] '+level+': '+String(chunk);
   logStream.write(line+(line.endsWith('\n')?'':'\n'));
   item.logs.push(line.slice(-4000));
@@ -290,6 +315,8 @@ app.post('/api/local-video',auth,(req,res)=>{
  child.on('error',e=>{appendLog('SPAWN ERROR',e.stack||e.message);item.status='failed';item.error=e.message;activeWan=null;if(pendingSave)clearTimeout(pendingSave);pendingSave=null;save();logStream.end()});
  child.on('close',code=>{
   if(item.status!=='cancelled'){item.status=code===0&&fs.existsSync(output)?'completed':'failed';if(item.status==='failed')item.error='Video engine exit code '+code+'; inspect logs for ROCm/PyTorch issues.';}
+  if(item.status==='completed'){item.progress=100;item.stage='Complete';item.etaSeconds=0}
+  else if(item.status==='failed')item.stage='Failed';
   appendLog('EXIT','process exited with code '+code);
   if(item.status==='failed'){
    const relevant=item.logs.slice(-12).join('').match(/(?:ModuleNotFoundError|ImportError|RuntimeError|AssertionError|Error):[^\n]+/g);
