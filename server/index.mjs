@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import pdfParse from 'pdf-parse';
+import {parse as parseCSV} from 'csv-parse/sync';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -88,7 +89,7 @@ app.post('/api/logout',auth,(req,res)=>{tokens.delete(req.headers.authorization.
 app.get('/api/me',auth,(req,res)=>res.json({id:req.user.id,username:req.user.username,role:req.user.role}));
 app.get('/api/users',auth,admin,(_req,res)=>res.json(db.users.map(u=>({id:u.id,username:u.username,role:u.role}))));
 app.post('/api/users',auth,admin,(req,res)=>{
- const username=clean(req.body.username,60),password=String(req.body.password||''),role=req.body.role==='admin'?'admin':'member';
+ const username=clean(req.body.username,60),password=String(req.body.password||''),role='member';
  if(!/^[a-zA-Z0-9._-]{3,40}$/.test(username)||password.length<12)return failure(res,400,'Username or password invalid; minimum 12 characters');
  if(db.users.some(u=>u.username.toLowerCase()===username.toLowerCase()))return failure(res,409,'User exists');
  const u={id:id(),username,role,passwordHash:passwordHash(password),createdAt:new Date().toISOString()};
@@ -166,6 +167,8 @@ const workflows={
  'Research Brief':['Extract key claims and gaps from the following material:','Challenge unsupported assumptions and list needed evidence for:','Prepare a clear executive summary and follow-up actions from:']
 };
 let running=false;
+for(const job of db.jobs){if(job.status==='running'){job.status='failed';job.error='Interrupted by server restart. Retry to run again.';}}
+save();
 async function processJobs(){
  if(running)return;running=true;
  try{
@@ -242,16 +245,45 @@ app.get('/api/videos/:id',auth,async(req,res)=>{
   const result=await miniFetch(base+'/v2/query/video_generation/'+encodeURIComponent(item.taskId),{method:'GET'});
   const task=result.task||result.data||result;
   item.status=String(task.status||task.state||'processing');
-  item.videoUrl=task.video_url||task.video?.url||task.output?.video_url||item.videoUrl||null;
+  item.videoUrl=task.content?.url||task.video_url||task.video?.url||task.output?.video_url||item.videoUrl||null;
   item.error=task.error?.message||null;save();res.json({item,provider:result});
  }catch(e){failure(res,502,'MiniMax status check failed: '+e.message)}
 });
+
+app.post('/api/pdf/merge',auth,upload.array('files',6),async(req,res)=>{
+ const files=req.files||[];
+ if(files.length<2)return failure(res,400,'Upload at least two PDF files');
+ if(files.some(f=>path.extname(f.originalname).toLowerCase()!=='.pdf'))return failure(res,415,'Only PDF files allowed');
+ try{
+  const merged=await PDFDocument.create();
+  for(const f of files){const src=await PDFDocument.load(f.buffer);const pages=await merged.copyPages(src,src.getPageIndices());for(const page of pages)merged.addPage(page);}
+  const bytes=await merged.save();
+  res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition','attachment; filename="theux-merged.pdf"');res.send(Buffer.from(bytes));
+ }catch(e){failure(res,422,'PDF merge failed: '+e.message)}
+});
+app.post('/api/csv/analyze',auth,upload.single('file'),async(req,res)=>{
+ if(!req.file||path.extname(req.file.originalname).toLowerCase()!=='.csv')return failure(res,415,'Choose a CSV file');
+ try{
+  const rows=parseCSV(req.file.buffer.toString('utf8'),{columns:true,skip_empty_lines:true,bom:true,relax_quotes:true,skip_records_with_error:true,to:20001});
+  if(!rows.length)return failure(res,422,'CSV is empty or unreadable');
+  const columns=Object.keys(rows[0]).slice(0,80);
+  const summary=columns.map(c=>{
+   const values=rows.map(x=>String(x[c]??'').trim());
+   const nonempty=values.filter(Boolean),numbers=nonempty.filter(v=>v!==''&&Number.isFinite(Number(v))).map(Number);
+   const isNumeric=nonempty.length>0&&numbers.length>=nonempty.length*.95;
+   return {column:c,missing:values.length-nonempty.length,unique:new Set(nonempty).size,...(isNumeric?{min:Math.min(...numbers),max:Math.max(...numbers),avg:Math.round(numbers.reduce((a,b)=>a+b,0)/numbers.length*100)/100}:{} )};
+  });
+  res.json({filename:safeName(req.file.originalname),rows:rows.length,columns:columns.length,summary,preview:rows.slice(0,5)});
+ }catch(e){failure(res,422,'Could not parse CSV: '+e.message)}
+});
+
 app.use((err,req,res,next)=>{
  if(err instanceof multer.MulterError)return failure(res,413,'Upload limit: 15 MB');
  if(err.message==='Origin not approved')return failure(res,403,'Origin not approved by CORS_ORIGIN');
  console.error('[error]',err.message);failure(res,500,'Unexpected server error');
 });
 if(process.env.NODE_ENV!=='test'){
+ setImmediate(processJobs);
  app.listen(port,process.env.HOST||'127.0.0.1',()=>{console.log('[Theux AI] backend on http://'+(process.env.HOST||'127.0.0.1')+':'+port);console.log('[Theux AI] data in '+home);if(!db.users.length)console.log('[Theux AI] Open local frontend and create the initial super admin account.')});
 }
 export {app};
