@@ -22,14 +22,17 @@ If Node, Git or Ollama was just installed, Windows may need a new terminal for P
 - Two-model comparison arena (runs models against the same prompt).
 - Developer, website planning, research-on-supplied-material, QA, prompt and marketing assistants.
 - Private per-user document upload for extractable PDF, TXT, Markdown, CSV, JSON and LOG, and document Q&A with keyword-matched snippets.
-- Basic Latin-character PDF export.
+- Basic Latin-character PDF export and working PDF merge for 2–6 uploaded PDFs.
+- CSV analytics: column statistics, unique values, numeric min/max/averages and previews.
+- Image resizer: private in-browser centered-square crop and PNG export (including 1000×1000 and 1080×1080).
+- Browser voice narration using the browser's speech synthesis engine (may be cloud-backed; not Chatterbox).
 - Queued, stoppable and retryable 3-step AI missions, with saved results and logs.
 - Secure first-run super-admin setup, member creation and account separation.
 - MiniMax H3 text-to-video submit and status checking (PAID API integration, not local generation). An explicit cost authorization is required on each new job.
 - Premium responsive dark-purple Theux Design UI, settings and Netlify build.
 - A catalog of open-source projects that can be integrated separately.
 
-The hub has 12 built-in tool experiences powered by the backend, plus external repository references. These are not 12 independently trained AI models or 40 self-hosted programs.
+The hub has 16 integrated tool experiences (15 local / browser features and one optional hosted video workflow) powered by the backend, plus external repository references. These are not 16 independently trained AI models or 40 self-hosted programs.
 
 ## WHAT IS NOT YET INSTALLED
 
