@@ -118,3 +118,6 @@ Run npm run server and npm run dev in separate terminals. Requires Node.js 22+.
 ## LICENSE
 
 The original Theux integration code in this repository is MIT licensed (see LICENSE). Third-party repositories retain their own licenses.
+
+## Fix: local admin setup and CORS
+The provided .env.example can be renamed directly to .env. The backend accepts any localhost or 127.0.0.1 Vite development port; first-time setup still requires a local browser origin. Email usernames are supported. Set your own password in the private first-time setup form; it is never committed to GitHub. Stop old Theux terminals before restarting the updated BAT. Do not delete data/store.json.

@@ -23,9 +23,14 @@ const tokens=new Map();
 const attempts=new Map();
 const controllers=new Map();
 const port=Number(process.env.PORT||4317);
-const allowed=(process.env.CORS_ORIGIN||'http://localhost:5173,http://127.0.0.1:5173').split(',').map(x=>x.trim());
+const allowed=(process.env.CORS_ORIGIN||'').split(',').map(x=>x.trim().replace(/\/$/,'')).filter(Boolean);
+function isLoopbackOrigin(origin){
+ try{const u=new URL(origin);return u.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(u.hostname)&&/^\d+$/.test(u.port)}catch{return false}
+}
+function isApprovedOrigin(origin){return !origin||isLoopbackOrigin(origin)||allowed.includes(origin.replace(/\/$/,''))}
+
 app.disable('x-powered-by');
-app.use(cors({origin(origin,cb){if(!origin||allowed.includes(origin))return cb(null,true);cb(new Error('Origin not approved'));},methods:['GET','POST','DELETE'],allowedHeaders:['Content-Type','Authorization']}));
+app.use(cors({origin(origin,cb){if(isApprovedOrigin(origin))return cb(null,true);cb(new Error('Origin not approved'));},methods:['GET','POST','DELETE'],allowedHeaders:['Content-Type','Authorization']}));
 app.use(express.json({limit:'1mb'}));
 app.use((req,res,next)=>{res.setHeader('Cache-Control','no-store');next()});
 function id(){return crypto.randomUUID()}
@@ -72,16 +77,16 @@ app.get('/api/bootstrap',(_req,res)=>res.json({setupRequired:db.users.length===0
 app.post('/api/setup',(req,res)=>{
  if(db.users.length)return failure(res,409,'Already configured');
  const origin=req.headers.origin||'';
- if(origin&&!/^http:\/\/(localhost|127\.0\.0\.1):5173$/.test(origin))return failure(res,403,'Complete initial setup locally before using a public tunnel');
- const username=clean(req.body.username,60),password=String(req.body.password||'');
- if(!/^[a-zA-Z0-9._-]{3,40}$/.test(username)||password.length<12)return failure(res,400,'Use a valid username and password of at least 12 characters');
+ if(origin&&!isLoopbackOrigin(origin))return failure(res,403,'Initial setup is available only from localhost');
+ const username=clean(req.body.username,120),password=String(req.body.password||'');
+ if(!/^(?:[a-zA-Z0-9._-]{3,40}|[a-zA-Z0-9._%+-]{1,64}@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})$/.test(username)||password.length<12)return failure(res,400,'Use a valid username and password of at least 12 characters');
  const user={id:id(),username,role:'admin',passwordHash:passwordHash(password),createdAt:new Date().toISOString()};
  db.users.push(user);save();
  res.status(201).json({token:tokenFor(user),user:{id:user.id,username:user.username,role:user.role}});
 });
 app.post('/api/login',(req,res)=>{
  if(!rate(req.ip))return failure(res,429,'Too many attempts; retry in 10 minutes');
- const user=db.users.find(x=>x.username===clean(req.body.username,60));
+ const user=db.users.find(x=>x.username.toLowerCase()===clean(req.body.username,120).toLowerCase());
  if(!user||!passwordVerify(String(req.body.password||''),user.passwordHash))return failure(res,401,'Invalid credentials');
  res.json({token:tokenFor(user),user:{id:user.id,username:user.username,role:user.role}});
 });
@@ -89,8 +94,8 @@ app.post('/api/logout',auth,(req,res)=>{tokens.delete(req.headers.authorization.
 app.get('/api/me',auth,(req,res)=>res.json({id:req.user.id,username:req.user.username,role:req.user.role}));
 app.get('/api/users',auth,admin,(_req,res)=>res.json(db.users.map(u=>({id:u.id,username:u.username,role:u.role}))));
 app.post('/api/users',auth,admin,(req,res)=>{
- const username=clean(req.body.username,60),password=String(req.body.password||''),role='member';
- if(!/^[a-zA-Z0-9._-]{3,40}$/.test(username)||password.length<12)return failure(res,400,'Username or password invalid; minimum 12 characters');
+ const username=clean(req.body.username,120),password=String(req.body.password||''),role='member';
+ if(!/^(?:[a-zA-Z0-9._-]{3,40}|[a-zA-Z0-9._%+-]{1,64}@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})$/.test(username)||password.length<12)return failure(res,400,'Username or password invalid; minimum 12 characters');
  if(db.users.some(u=>u.username.toLowerCase()===username.toLowerCase()))return failure(res,409,'User exists');
  const u={id:id(),username,role,passwordHash:passwordHash(password),createdAt:new Date().toISOString()};
  db.users.push(u);save();res.status(201).json({id:u.id,username,role});

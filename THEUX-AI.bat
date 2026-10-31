@@ -37,7 +37,7 @@ if not exist ".env" (
  copy /Y ".env.example" ".env" >nul
  echo [3/6] Created local environment template.
 ) else (
- echo [3/6] Preserved existing .env.
+ echo [3/6] Preserved existing .env. All localhost Vite ports are now allowed.
 )
 echo [4/6] Installing/checking Node dependencies...
 call npm install --no-audit --no-fund
