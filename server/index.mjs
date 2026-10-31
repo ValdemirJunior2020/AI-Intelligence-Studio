@@ -233,9 +233,25 @@ const wanModel=path.resolve(process.env.WAN_MODEL_DIR||path.join(home,'wan-video
 const wanBundledPython=path.join(home,'wan-video','venv-amd','Scripts','python.exe');
 const wanPython=process.env.WAN_PYTHON||(fs.existsSync(wanBundledPython)?wanBundledPython:'python');
 let activeWan=null;
+// Mark abandoned processes after restart. Keep full records in diagnostic exports.
+for(const v of db.videos){
+ if(v.engine==='local'&&v.status==='running'){
+  v.status='interrupted';v.error='Video process ended when the backend restarted. See saved logs.';
+ }
+}
+save();
 function wanReady(){return fs.existsSync(path.join(wanRoot,'generate.py'))&&fs.existsSync(path.join(wanModel,'config.json'))}
 app.get('/api/local-video/status',auth,(_req,res)=>res.json({configured:wanReady(),active:!!activeWan,model:'Wan2.1 T2V 1.3B'}));
-app.get('/api/local-video',auth,(req,res)=>res.json(db.videos.filter(v=>v.owner===req.user.id&&v.engine==='local').slice(-20).reverse()));
+// Clean workspace: only current jobs and successful results; historical failures remain in combined logs.
+app.get('/api/local-video',auth,(req,res)=>res.json(db.videos.filter(v=>v.owner===req.user.id&&v.engine==='local'&&['running','completed'].includes(v.status)&&!v.archived).slice(-20).reverse()));
+app.get('/api/local-video/history',auth,(req,res)=>res.json(db.videos.filter(v=>v.owner===req.user.id&&v.engine==='local'&&!['running','completed'].includes(v.status)).slice(-50).reverse()));
+app.post('/api/local-video/clear-errors',auth,(req,res)=>{
+ let count=0;
+ for(const v of db.videos){
+  if(v.owner===req.user.id&&v.engine==='local'&&['failed','cancelled','interrupted'].includes(v.status)&&!v.archived){v.archived=true;count++;}
+ }
+ save();res.json({ok:true,archived:count,message:'Old errors hidden. Diagnostics retained in the combined log.'});
+});
 app.post('/api/local-video',auth,(req,res)=>{
  if(!wanReady())return failure(res,409,'Install the local video engine using INSTALL-LOCAL-VIDEO.bat and restart the backend.');
  if(activeWan)return failure(res,409,'A local video is already generating.');
