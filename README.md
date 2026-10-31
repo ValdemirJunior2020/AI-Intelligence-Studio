@@ -125,3 +125,7 @@ The provided .env.example can be renamed directly to .env. The backend accepts a
 
 ### Local AI Video
 The Video Creator now connects to a local Wan2.1 1.3B subprocess instead of requiring MiniMax API credits. Run INSTALL-LOCAL-VIDEO.bat with a working AMD-compatible ROCm PyTorch interpreter. Local 480p text-to-video can be submitted and resulting MP4 files downloaded. GPU compatibility with RX 9060 XT on Windows is NOT verified; users may need manual ROCm environment setup. It is not yet a guaranteed one-click installer on AMD Windows. No ComfyUI. Wan2.1 official repository: https://github.com/Wan-Video/Wan2.1.
+
+
+## AMD Windows video installer troubleshooting (October 31, 2026)
+If you see `torch.__version__ = 2.14.0+cpu`, `torch.cuda.is_available() = False`, or `flash_attn` fails to build: stop installation. This means that Python cannot use your AMD GPU, and standard Wan requirements should NOT be installed indiscriminately. The installer now checks ROCm before proceeding and excludes `flash_attn` and automatic Torch replacement. Install an AMD-supported Python ROCm PyTorch wheel in a compatible environment following https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/compatibility/compatibilityrad/windows/windows_compatibility.html . Then point `WAN_PYTHON` to its interpreter. Wan2.1 upstream may still require AMD-specific attention/kernel changes. Existing global Python packages are not automatically repaired by this installer.
