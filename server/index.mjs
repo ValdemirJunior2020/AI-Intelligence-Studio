@@ -267,7 +267,7 @@ app.post('/api/local-video',auth,(req,res)=>{
   }
   appendLog('PREFLIGHT',preflight.stdout);
  }
- const child=spawn(wanPython,args,{cwd:wanRoot,windowsHide:true,env:{...process.env,PYTHONUNBUFFERED:'1'}});
+ const child=spawn(wanPython,args,{cwd:wanRoot,windowsHide:true,env:{...process.env,PYTHONUNBUFFERED:'1',PYTHONIOENCODING:'utf-8',PYTHONUTF8:'1'}});
  activeWan={child,id:item.id};
  child.stdout.on('data',chunk=>appendLog('OUT',chunk));
  child.stderr.on('data',chunk=>appendLog('ERR',chunk));

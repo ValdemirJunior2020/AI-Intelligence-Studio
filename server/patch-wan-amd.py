@@ -44,4 +44,18 @@ for file,content in [(fsdp,replacement),(entry,entry_text)]:
         print(f"Backup: {backup}")
     file.write_text(content,encoding="utf-8")
     print(f"Single GPU workaround: {file}")
-print("Single-GPU import workaround applied. Actual Wan inference still requires compatible AMD kernels.")
+# Windows ROCm wheels may omit the entire torch.distributed backend.
+# On single-GPU runs there is no initialized process group.
+for relative in ["generate.py", "wan/text2video.py"]:
+    target=root/relative
+    source=target.read_text(encoding="utf-8")
+    old="dist.is_initialized()"
+    new='getattr(dist, "is_initialized", lambda: False)()'
+    if old in source:
+        backup=target.with_name(target.name+".theux-original")
+        if not backup.exists():
+            shutil.copy2(target,backup)
+            print(f"Backup: {backup}")
+        target.write_text(source.replace(old,new),encoding="utf-8")
+        print(f"Patched single-GPU distributed check: {target}")
+print("Single-GPU compatibility fixes applied. GPU inference is still unverified.")
