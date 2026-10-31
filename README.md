@@ -133,3 +133,7 @@ If you see `torch.__version__ = 2.14.0+cpu`, `torch.cuda.is_available() = False`
 
 ### Automatic AMD ROCm Windows installation
 The updated INSTALL-LOCAL-VIDEO.bat provisions Python 3.12 with winget and an isolated environment under data/wan-video/venv-amd, installs the official AMD ROCm 7.2.1 Windows SDK and PyTorch wheels, verifies the RX 9060 XT can compute, installs non-FlashAttention dependencies, then fetches model weights. Backend automatically uses the dedicated interpreter. Requires Windows 11, Radeon driver 26.2.2, available free disk space, and compatible Wan kernels. This is automatic setup code, not a guarantee that upstream Wan 2.1 GPU inference works on native Windows; compatibility remains unverified on the user's machine.
+
+
+### Video installer v3 (October 31, 2026)
+The current installer banner is `THEUX AMD VIDEO AUTO INSTALLER v3 - NOT CPU PRECHECK`. If the window still says `THEUX LOCAL VIDEO - AMD GPU PRECHECK`, you are running an old local file. The new script uses AMD's documented `pip -f` repository-based ROCm wheel resolution and Python 3.12 in an isolated venv. It does not install flash_attn and leaves the global Python 3.11 unchanged. Successful installation still does not establish that the upstream Wan generation code runs on native Windows AMD without additional compatibility work.
