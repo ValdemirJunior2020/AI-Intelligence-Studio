@@ -283,6 +283,21 @@ app.post('/api/local-video',auth,(req,res)=>{
  });
  res.status(202).json(item);
 });
+app.get('/api/local-video/combined-logs',auth,(req,res)=>{
+ const jobs=db.videos.filter(v=>v.owner===req.user.id&&v.engine==='local').sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)));
+ const chunks=['THEUX AI - COMBINED LOCAL VIDEO LOG','Exported: '+new Date().toISOString(),'Jobs: '+jobs.length,'='.repeat(72)];
+ for(const v of jobs){
+  const filepath=path.join(home,'videos',v.id+'.log');
+  let log='No log recorded for this job.';
+  if(fs.existsSync(filepath))log=fs.readFileSync(filepath,'utf8');
+  else if(Array.isArray(v.logs)&&v.logs.length)log=v.logs.join('\n');
+  chunks.push(['','='.repeat(72),'JOB: '+v.id,'DATE: '+(v.createdAt||'Unknown')+' STATUS: '+v.status,'MODEL: '+(v.model||'Unknown')+' RATIO: '+(v.ratio||'Unknown'),'PROMPT: '+(v.prompt||''),'ERROR: '+(v.error||'None recorded'),'-'.repeat(72),log].join('\n'));
+ }
+ res.setHeader('Content-Type','text/plain; charset=utf-8');
+ res.setHeader('Content-Disposition','attachment; filename="theux-all-video-logs.txt"');
+ res.send(chunks.join('\n')+'\n');
+});
+
 app.get('/api/local-video/:id/logs',auth,(req,res)=>{
  const v=db.videos.find(v=>v.id===req.params.id&&v.owner===req.user.id&&v.engine==='local');
  if(!v)return failure(res,404,'Video not found');
