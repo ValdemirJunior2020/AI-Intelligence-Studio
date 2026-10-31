@@ -8,7 +8,7 @@ export const studios=[
   {id:'marketing',name:'Marketing Studio',group:'Business',icon:'megaphone',description:'Draft campaign copy, SEO briefs and product listings',status:'built-in'},
   {id:'research',name:'Research Desk',group:'Intelligence',icon:'search',description:'Analyze supplied sources and produce researched reports',status:'built-in'},
   {id:'automation',name:'Mission Control',group:'Automation',icon:'workflow',description:'Run queued, cancellable Ollama prompt workflows',status:'built-in'},
-  {id:'video',name:'MiniMax H3 Video',group:'Creative',icon:'film',description:'Hosted text-to-video with paid API key and cost confirmation',status:'key-required'},
+  {id:'video',name:'Local AI Video',group:'Creative',icon:'film',description:'Generate video locally with Wan2.1, no paid API key',status:'built-in'},
   {id:'website',name:'Website Builder',group:'Developer',icon:'panels-top-left',description:'Generate portable React / web project starters',status:'built-in'},
   {id:'prompts',name:'Prompt Workshop',group:'Intelligence',icon:'sparkles',description:'Design and optimize prompts for any local model',status:'built-in'},
   {id:'qa',name:'QA Copilot',group:'Business',icon:'shield-check',description:'Create QA rubrics and coaching recommendations',status:'built-in'},

@@ -8,6 +8,7 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import {spawn} from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { clean, safeName, snippets, passwordHash, passwordVerify } from './lib.mjs';
 import { studios, groups } from './catalog.mjs';
@@ -226,6 +227,48 @@ async function miniFetch(url,options){
   return json;
  }finally{clearTimeout(timer)}
 }
+
+const wanRoot=path.resolve(process.env.WAN_ROOT||path.join(home,'wan-video','Wan2.1'));
+const wanModel=path.resolve(process.env.WAN_MODEL_DIR||path.join(home,'wan-video','Wan2.1-T2V-1.3B'));
+const wanPython=process.env.WAN_PYTHON||'python';
+let activeWan=null;
+function wanReady(){return fs.existsSync(path.join(wanRoot,'generate.py'))&&fs.existsSync(path.join(wanModel,'config.json'))}
+app.get('/api/local-video/status',auth,(_req,res)=>res.json({configured:wanReady(),active:!!activeWan,model:'Wan2.1 T2V 1.3B'}));
+app.get('/api/local-video',auth,(req,res)=>res.json(db.videos.filter(v=>v.owner===req.user.id&&v.engine==='local').slice(-20).reverse()));
+app.post('/api/local-video',auth,(req,res)=>{
+ if(!wanReady())return failure(res,409,'Install the local video engine using INSTALL-LOCAL-VIDEO.bat and restart the backend.');
+ if(activeWan)return failure(res,409,'A local video is already generating.');
+ const prompt=clean(req.body.prompt,1000),ratio=req.body.ratio==='9:16'?'9:16':'16:9';
+ if(!prompt)return failure(res,400,'Enter a video prompt');
+ const item={id:id(),owner:req.user.id,engine:'local',model:'Wan2.1-T2V-1.3B',prompt,ratio,status:'running',logs:[],createdAt:new Date().toISOString()};
+ const folder=path.join(home,'videos');fs.mkdirSync(folder,{recursive:true});
+ const output=path.join(folder,item.id+'.mp4');
+ db.videos.push(item);save();
+ const args=['generate.py','--task','t2v-1.3B','--size',ratio==='9:16'?'480*832':'832*480','--ckpt_dir',wanModel,'--prompt',prompt,'--offload_model','True','--t5_cpu','--sample_shift','8','--sample_guide_scale','6','--save_file',output];
+ const child=spawn(wanPython,args,{cwd:wanRoot,windowsHide:true,env:{...process.env,PYTHONUNBUFFERED:'1'}});
+ activeWan={child,id:item.id};
+ for(const stream of [child.stdout,child.stderr])stream.on('data',x=>{item.logs.push(String(x).slice(-600));item.logs=item.logs.slice(-30)});
+ child.on('error',e=>{item.status='failed';item.error=e.message;activeWan=null;save()});
+ child.on('close',code=>{
+  if(item.status!=='cancelled'){item.status=code===0&&fs.existsSync(output)?'completed':'failed';if(item.status==='failed')item.error='Video engine exit code '+code+'; inspect logs for ROCm/PyTorch issues.';}
+  activeWan=null;save();
+ });
+ res.status(202).json(item);
+});
+app.get('/api/local-video/:id',auth,(req,res)=>{
+ const v=db.videos.find(v=>v.id===req.params.id&&v.owner===req.user.id&&v.engine==='local');if(!v)return failure(res,404,'Video not found');res.json(v);
+});
+app.post('/api/local-video/:id/stop',auth,(req,res)=>{
+ const v=db.videos.find(v=>v.id===req.params.id&&v.owner===req.user.id&&v.engine==='local');
+ if(!v||v.status!=='running'||activeWan?.id!==v.id)return failure(res,409,'Video not running');
+ v.status='cancelled';activeWan.child.kill();save();res.json({ok:true});
+});
+app.get('/api/local-video/:id/download',auth,(req,res)=>{
+ const v=db.videos.find(v=>v.id===req.params.id&&v.owner===req.user.id&&v.engine==='local'&&v.status==='completed');
+ if(!v)return failure(res,404,'Video not available');
+ res.download(path.join(home,'videos',v.id+'.mp4'),'theux-video.mp4');
+});
+
 app.get('/api/videos',auth,(req,res)=>res.json(db.videos.filter(x=>x.owner===req.user.id).slice(-25).reverse()));
 app.post('/api/videos',auth,async(req,res)=>{
  if(!process.env.MINIMAX_API_KEY)return failure(res,409,'Set MINIMAX_API_KEY in your local .env file to enable billed video generation');

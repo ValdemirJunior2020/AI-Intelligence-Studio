@@ -121,3 +121,7 @@ The original Theux integration code in this repository is MIT licensed (see LICE
 
 ## Fix: local admin setup and CORS
 The provided .env.example can be renamed directly to .env. The backend accepts any localhost or 127.0.0.1 Vite development port; first-time setup still requires a local browser origin. Email usernames are supported. Set your own password in the private first-time setup form; it is never committed to GitHub. Stop old Theux terminals before restarting the updated BAT. Do not delete data/store.json.
+
+
+### Local AI Video
+The Video Creator now connects to a local Wan2.1 1.3B subprocess instead of requiring MiniMax API credits. Run INSTALL-LOCAL-VIDEO.bat with a working AMD-compatible ROCm PyTorch interpreter. Local 480p text-to-video can be submitted and resulting MP4 files downloaded. GPU compatibility with RX 9060 XT on Windows is NOT verified; users may need manual ROCm environment setup. It is not yet a guaranteed one-click installer on AMD Windows. No ComfyUI. Wan2.1 official repository: https://github.com/Wan-Video/Wan2.1.
