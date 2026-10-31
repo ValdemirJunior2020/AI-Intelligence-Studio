@@ -82,14 +82,14 @@ As of October 2026, MiniMax lists H3 at $0.13 per second for 2K output. Example:
 ## DISK SPACE ESTIMATES
 
 - Project source and npm dependencies: approximately 0.2–0.8 GB.
-- Ollama application and runtime: approximately 0.5–1.5 GB.
+- Ollama application and AMD runtime: allow approximately 3–5 GB (official Windows installation guidance requests at least 4 GB free).
 - One quantized 7B local model: approximately 4–6 GB.
 - Two 7B–9B quantized models: approximately 9–14 GB total.
 - Documents: depends on uploaded files and extracted text.
 - MiniMax H3: 0 GB local model weights because generation happens on MiniMax servers; saved video files take space.
 - External projects: highly variable, from small libraries to tens/hundreds of GB if installed with GPU models.
 
-Allow at least 20 GB of free space for the first installation. A 1 TB SSD is a practical expansion target; reserve 100–200 GB if you want many future models and integrations. These numbers are planning estimates, not a measured installation.
+Allow at least 20–25 GB of free space for the first installation (roughly 8–16 GB for this app, runtime and one 7B model, plus temporary install space). A 1 TB SSD is a practical expansion target; reserve 100–200 GB if you want many future models and integrations. These numbers are planning estimates, not a measured installation.
 
 To move application data to your new SSD, set AIHUB_DATA_DIR in .env before launch. To move Ollama model weights, follow the official instructions for the OLLAMA_MODELS Windows environment variable; stop Ollama and verify the new path before removing old files.
 
