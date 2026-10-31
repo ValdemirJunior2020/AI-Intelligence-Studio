@@ -230,7 +230,8 @@ async function miniFetch(url,options){
 
 const wanRoot=path.resolve(process.env.WAN_ROOT||path.join(home,'wan-video','Wan2.1'));
 const wanModel=path.resolve(process.env.WAN_MODEL_DIR||path.join(home,'wan-video','Wan2.1-T2V-1.3B'));
-const wanPython=process.env.WAN_PYTHON||'python';
+const wanBundledPython=path.join(home,'wan-video','venv-amd','Scripts','python.exe');
+const wanPython=process.env.WAN_PYTHON||(fs.existsSync(wanBundledPython)?wanBundledPython:'python');
 let activeWan=null;
 function wanReady(){return fs.existsSync(path.join(wanRoot,'generate.py'))&&fs.existsSync(path.join(wanModel,'config.json'))}
 app.get('/api/local-video/status',auth,(_req,res)=>res.json({configured:wanReady(),active:!!activeWan,model:'Wan2.1 T2V 1.3B'}));

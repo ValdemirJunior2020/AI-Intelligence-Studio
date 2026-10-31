@@ -1,66 +1,95 @@
 @echo off
 setlocal EnableExtensions
-title Theux AI - AMD Local Video Setup
+title THEUX AMD VIDEO - AUTO ROCm SETUP
 cd /d "%~dp0"
 echo ============================================================
-echo THEUX LOCAL VIDEO - AMD GPU PRECHECK
+echo THEUX AI - AMD WINDOWS ROCm AUTOMATIC SETUP
 echo ============================================================
+echo Using an isolated Python 3.12 environment; no global changes.
+echo ROCm 7.2.1 requires Windows 11 and AMD driver 26.2.2.
+echo Requires free SSD space for PyTorch runtime and video weights.
 echo.
-echo This installer requires an AMD ROCm-enabled PyTorch interpreter.
-echo It WILL NOT overwrite your global Python or install NVIDIA CUDA.
-echo It WILL NOT install flash_attn.
-echo.
-set "PY=python"
-if defined WAN_PYTHON set "PY=%WAN_PYTHON%"
-where "%PY%" >nul 2>&1
-if errorlevel 1 (
- echo ERROR: Python interpreter not found: %PY%
- goto :fail
-)
-echo Checking %PY% ...
-"%PY%" -c "import torch,sys; print('Python:',sys.executable); print('PyTorch:',torch.__version__); print('ROCm:',torch.version.hip); print('GPU:',torch.cuda.is_available()); assert torch.version.hip is not None and torch.cuda.is_available(), 'This PyTorch is not GPU-enabled ROCm.'"
-if errorlevel 1 (
- echo.
- echo STOPPED: Current Python is CPU-only or AMD ROCm GPU is unavailable.
- echo Your existing PyTorch has not been modified.
- echo Follow the official AMD Windows Radeon PyTorch installation guide.
- echo On Windows, use a supported AMD ROCm Python environment.
- echo Then set WAN_PYTHON to that interpreter, and rerun this installer.
- goto :fail
-)
-echo AMD GPU confirmed. Installing a dedicated package environment.
-set "WD=%CD%\data\wan-video"
-if not exist "%WD%" mkdir "%WD%"
-where git >nul 2>&1
-if errorlevel 1 goto :needgit
-if not exist "%WD%\Wan2.1\generate.py" (
- git clone --depth 1 https://github.com/Wan-Video/Wan2.1.git "%WD%\Wan2.1"
- if errorlevel 1 goto :fail
-)
-echo Installing non-Torch, non-FlashAttention packages only.
-"%PY%" -m pip install --no-deps -r "%~dp0video-requirements-amd.txt"
-if errorlevel 1 goto :fail
-echo.
-echo Validating common Wan dependencies...
-"%PY%" -c "import torch,torchvision,diffusers,transformers,accelerate,imageio,easydict,ftfy; assert torch.cuda.is_available()"
-if errorlevel 1 (
- echo Missing or incompatible packages. Consult AMD ROCm and Wan documentation.
- goto :fail
-)
-"%PY%" -m pip install huggingface_hub
-if errorlevel 1 goto :fail
-echo Downloading Wan 1.3B model (several GB)...
-"%PY%" -m huggingface_hub download Wan-AI/Wan2.1-T2V-1.3B --local-dir "%WD%\Wan2.1-T2V-1.3B"
-if errorlevel 1 goto :fail
-echo.
-echo Model files downloaded. Restart Theux AI to check the engine.
-echo Model execution may still require AMD-specific code patches.
+where py >nul 2>&1
+if errorlevel 1 goto installPython
+py -3.12 -c "import sys; assert sys.version_info[:2] == (3,12)" >nul 2>&1
+if errorlevel 1 goto installPython
+goto pythonReady
+:installPython
+echo [1/7] Installing official Python 3.12...
+where winget >nul 2>&1
+if errorlevel 1 goto wingetError
+winget install --id Python.Python.3.12 --exact --accept-package-agreements --accept-source-agreements
+if errorlevel 1 goto failed
+echo Python installed. Please rerun this file so PATH refreshes.
 pause
 exit /b 0
-:needgit
-echo Git is missing.
-:fail
+:pythonReady
+echo [1/7] Python 3.12 ready.
+set "BASE=%CD%\data\wan-video"
+set "VENV=%BASE%\venv-amd"
+set "PY=%VENV%\Scripts\python.exe"
+if not exist "%BASE%" mkdir "%BASE%"
+if not exist "%PY%" (
+ echo [2/7] Creating isolated virtual environment...
+ py -3.12 -m venv "%VENV%"
+ if errorlevel 1 goto failed
+)
+"%PY%" -m pip install --upgrade pip wheel setuptools
+if errorlevel 1 goto failed
+echo [3/7] Installing AMD official ROCm Windows SDK 7.2.1...
+"%PY%" -m pip install --no-cache-dir ^
+ "https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/rocm_sdk_core-7.2.1-py3-none-win_amd64.whl" ^
+ "https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/rocm_sdk_devel-7.2.1-py3-none-win_amd64.whl" ^
+ "https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/rocm_sdk_libraries_custom-7.2.1-py3-none-win_amd64.whl" ^
+ "https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/rocm-7.2.1.tar.gz"
+if errorlevel 1 goto failed
+echo [4/7] Installing AMD official ROCm PyTorch wheels...
+"%PY%" -m pip install --no-cache-dir ^
+ "https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/torch-2.9.1%%2Brocm7.2.1-cp312-cp312-win_amd64.whl" ^
+ "https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/torchaudio-2.9.1%%2Brocm7.2.1-cp312-cp312-win_amd64.whl" ^
+ "https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/torchvision-0.24.1%%2Brocm7.2.1-cp312-cp312-win_amd64.whl"
+if errorlevel 1 goto failed
+echo Checking AMD GPU and ROCm before model download...
+"%PY%" -c "import torch; print('Torch:',torch.__version__,'ROCm:',torch.version.hip,'GPU:',torch.cuda.is_available()); assert torch.version.hip is not None and torch.cuda.is_available(); print(torch.cuda.get_device_name(0))"
+if errorlevel 1 goto driverError
+echo [5/7] Installing video requirements without NVIDIA flash_attn...
+"%PY%" -m pip install -r "%~dp0video-requirements-amd.txt"
+if errorlevel 1 goto failed
+echo Verifying the AMD Torch wheel has not been overwritten...
+"%PY%" -c "import torch; print(torch.__version__,torch.version.hip,torch.cuda.is_available()); assert torch.version.hip is not None and torch.cuda.is_available()"
+if errorlevel 1 goto failed
+where git >nul 2>&1
+if errorlevel 1 goto gitError
+echo [6/7] Checking Wan2.1 source...
+if not exist "%BASE%\Wan2.1\generate.py" (
+ git clone --depth 1 https://github.com/Wan-Video/Wan2.1.git "%BASE%\Wan2.1"
+ if errorlevel 1 goto failed
+)
+echo [7/7] Downloading Wan2.1 1.3B weights...
+"%PY%" -m huggingface_hub download Wan-AI/Wan2.1-T2V-1.3B --local-dir "%BASE%\Wan2.1-T2V-1.3B"
+if errorlevel 1 (
+ "%PY%" -m pip install "huggingface_hub[cli]"
+ hf download Wan-AI/Wan2.1-T2V-1.3B --local-dir "%BASE%\Wan2.1-T2V-1.3B"
+ if errorlevel 1 goto failed
+)
 echo.
-echo Video installation not completed. No video model was downloaded by this attempt.
+echo ROCm setup and model download complete.
+echo Run THEUX-AI.bat once to restart backend with isolated Python.
+echo.
+pause
+exit /b 0
+:wingetError
+echo Windows package manager winget is missing. Python 3.12 cannot be installed automatically.
+goto failed
+:gitError
+echo Git is missing. Run THEUX-AI.bat first, then retry.
+goto failed
+:driverError
+echo AMD ROCm installed, but GPU cannot be used. Check Windows 11 and driver 26.2.2.
+echo This installer stopped before downloading video weights.
+goto failed
+:failed
+echo.
+echo Setup failed. Global Python was not changed. Check the output above.
 pause
 exit /b 1
