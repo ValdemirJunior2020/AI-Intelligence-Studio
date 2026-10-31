@@ -54,7 +54,7 @@ if not exist "%BASE%\Wan2.1\generate.py" (
  if errorlevel 1 goto fail
 )
 echo [4/6] Installing video dependencies WITHOUT flash_attn...
-"%PY%" -m pip install --no-cache-dir opencv-python diffusers transformers accelerate imageio imageio-ffmpeg easydict ftfy dashscope "huggingface_hub[cli]" tqdm
+"%PY%" -m pip install --no-cache-dir opencv-python diffusers transformers accelerate imageio imageio-ffmpeg easydict ftfy dashscope "huggingface_hub[cli]" tqdm einops
 if errorlevel 1 goto fail
 "%PY%" -c "import torch; assert torch.cuda.is_available(); print('AMD GPU still available:',torch.cuda.get_device_name(0))"
 if errorlevel 1 goto gpuFail

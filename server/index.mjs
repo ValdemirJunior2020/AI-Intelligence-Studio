@@ -244,17 +244,41 @@ app.post('/api/local-video',auth,(req,res)=>{
  const item={id:id(),owner:req.user.id,engine:'local',model:'Wan2.1-T2V-1.3B',prompt,ratio,status:'running',logs:[],createdAt:new Date().toISOString()};
  const folder=path.join(home,'videos');fs.mkdirSync(folder,{recursive:true});
  const output=path.join(folder,item.id+'.mp4');
+ const logFile=path.join(folder,item.id+'.log');
+ item.logFile=logFile;
+ const logStream=fs.createWriteStream(logFile,{flags:'a'});
+ let pendingSave=null;
+ const appendLog=(level,chunk)=>{
+  const line='['+new Date().toISOString()+'] '+level+': '+String(chunk);
+  logStream.write(line+(line.endsWith('\n')?'':'\n'));
+  item.logs.push(line.slice(-4000));
+  item.logs=item.logs.slice(-120);
+  if(!pendingSave)pendingSave=setTimeout(()=>{pendingSave=null;save()},500);
+ };
  db.videos.push(item);save();
  const args=['generate.py','--task','t2v-1.3B','--size',ratio==='9:16'?'480*832':'832*480','--ckpt_dir',wanModel,'--prompt',prompt,'--offload_model','True','--t5_cpu','--sample_shift','8','--sample_guide_scale','6','--save_file',output];
  const child=spawn(wanPython,args,{cwd:wanRoot,windowsHide:true,env:{...process.env,PYTHONUNBUFFERED:'1'}});
  activeWan={child,id:item.id};
- for(const stream of [child.stdout,child.stderr])stream.on('data',x=>{item.logs.push(String(x).slice(-600));item.logs=item.logs.slice(-30)});
- child.on('error',e=>{item.status='failed';item.error=e.message;activeWan=null;save()});
+ child.stdout.on('data',chunk=>appendLog('OUT',chunk));
+ child.stderr.on('data',chunk=>appendLog('ERR',chunk));
+ child.on('error',e=>{appendLog('SPAWN ERROR',e.stack||e.message);item.status='failed';item.error=e.message;activeWan=null;if(pendingSave)clearTimeout(pendingSave);pendingSave=null;save();logStream.end()});
  child.on('close',code=>{
   if(item.status!=='cancelled'){item.status=code===0&&fs.existsSync(output)?'completed':'failed';if(item.status==='failed')item.error='Video engine exit code '+code+'; inspect logs for ROCm/PyTorch issues.';}
-  activeWan=null;save();
+  appendLog('EXIT','process exited with code '+code);
+  if(item.status==='failed'){
+   const relevant=item.logs.slice(-12).join('').match(/(?:ModuleNotFoundError|ImportError|RuntimeError|AssertionError|Error):[^\n]+/g);
+   if(relevant?.length)item.error=relevant[relevant.length-1].slice(0,1000);
+  }
+  activeWan=null;if(pendingSave)clearTimeout(pendingSave);pendingSave=null;save();logStream.end();
  });
  res.status(202).json(item);
+});
+app.get('/api/local-video/:id/logs',auth,(req,res)=>{
+ const v=db.videos.find(v=>v.id===req.params.id&&v.owner===req.user.id&&v.engine==='local');
+ if(!v)return failure(res,404,'Video not found');
+ const log=path.join(home,'videos',v.id+'.log');
+ const content=fs.existsSync(log)?fs.readFileSync(log,'utf8').slice(-100000):v.logs?.join('\n')||'No logs recorded for this job.';
+ res.json({id:v.id,status:v.status,error:v.error||null,log:content});
 });
 app.get('/api/local-video/:id',auth,(req,res)=>{
  const v=db.videos.find(v=>v.id===req.params.id&&v.owner===req.user.id&&v.engine==='local');if(!v)return failure(res,404,'Video not found');res.json(v);
