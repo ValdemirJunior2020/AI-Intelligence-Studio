@@ -257,7 +257,7 @@ app.post('/api/local-video',auth,(req,res)=>{
  if(activeWan)return failure(res,409,'A local video is already generating.');
  const prompt=clean(req.body.prompt,1000),ratio=req.body.ratio==='9:16'?'9:16':'16:9';
  if(!prompt)return failure(res,400,'Enter a video prompt');
- const item={id:id(),owner:req.user.id,engine:'local',model:'Wan2.1-T2V-1.3B',prompt,ratio,status:'running',logs:[],createdAt:new Date().toISOString(),stage:'Starting video engine',stepsDone:0,stepsTotal:50,progress:null};
+ const item={id:id(),owner:req.user.id,engine:'local',model:'Wan2.1-T2V-1.3B',prompt,ratio,status:'running',logs:[],createdAt:new Date().toISOString(),stage:'Starting video engine',stepsDone:0,stepsTotal:20,progress:null};
  const folder=path.join(home,'videos');fs.mkdirSync(folder,{recursive:true});
  const output=path.join(folder,item.id+'.mp4');
  const logFile=path.join(folder,item.id+'.log');
@@ -297,7 +297,10 @@ app.post('/api/local-video',auth,(req,res)=>{
   if(!pendingSave)pendingSave=setTimeout(()=>{pendingSave=null;save()},500);
  };
  db.videos.push(item);save();
- const args=['generate.py','--task','t2v-1.3B','--size',ratio==='9:16'?'480*832':'832*480','--ckpt_dir',wanModel,'--prompt',prompt,'--offload_model','True','--t5_cpu','--sample_shift','8','--sample_guide_scale','6','--save_file',output];
+ // AMD 16 GB VRAM / 32 GB RAM: lower temporal context and sampler workload.
+ const frameCount=33,sampleSteps=20;
+ item.frameCount=frameCount;item.stepsTotal=sampleSteps;item.memoryMode='AMD low-memory';
+ const args=['generate.py','--task','t2v-1.3B','--size',ratio==='9:16'?'480*832':'832*480','--frame_num',String(frameCount),'--sample_steps',String(sampleSteps),'--ckpt_dir',wanModel,'--prompt',prompt,'--offload_model','True','--t5_cpu','--sample_shift','8','--sample_guide_scale','6','--save_file',output];
  const patchScript=path.resolve(path.join(path.dirname(fileURLToPath(import.meta.url)),'patch-wan-amd.py'));
  if(process.platform==='win32'){
   const preflight=spawnSync(wanPython,[patchScript,'--wan-root',wanRoot],{encoding:'utf8',timeout:30000,windowsHide:true});
