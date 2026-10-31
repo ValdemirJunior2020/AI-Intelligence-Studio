@@ -73,4 +73,27 @@ if "# THEUX_AMD_SDPA_FALLBACK_V1" not in attention_text:
     print(f"Installed AMD PyTorch SDPA fallback: {attention_file}")
 else:
     print(f"AMD SDPA fallback already installed: {attention_file}")
+# Release CPU-only T5 weights after prompt encoding. T5 is not needed for denoising.
+# Keep the initial CPU mode to avoid exhausting 16GB VRAM with both T5 and DiT.
+t2v_file=root/"wan"/"text2video.py"
+t2v_text=t2v_file.read_text(encoding="utf-8")
+release_marker="# THEUX_RELEASE_T5_AFTER_ENCODING_V1"
+anchor="        noise = ["
+if release_marker not in t2v_text:
+    if anchor not in t2v_text:
+        raise SystemExit("Wan text2video.py changed; T5 release patch not applied.")
+    backup=t2v_file.with_name(t2v_file.name+".theux-original")
+    if not backup.exists():
+        shutil.copy2(t2v_file,backup)
+    release_block="""        # THEUX_RELEASE_T5_AFTER_ENCODING_V1
+        # After prompt and negative prompt tensors have been copied to GPU,
+        # unload T5 CPU weights before allocating video latents.
+        if self.t5_cpu:
+            del self.text_encoder
+            gc.collect()
+"""
+    t2v_file.write_text(t2v_text.replace(anchor,release_block+"\n"+anchor,1),encoding="utf-8")
+    print(f"Installed one-shot T5 memory cleanup: {t2v_file}")
+else:
+    print("T5 memory cleanup already installed.")
 print("Single-GPU compatibility fixes applied. GPU inference is still unverified.")
