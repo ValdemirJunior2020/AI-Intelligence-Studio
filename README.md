@@ -59,7 +59,7 @@ Example local backend .env:
 HOST=127.0.0.1
 PORT=4317
 OLLAMA_URL=http://127.0.0.1:11434
-CORS_ORIGIN=https://yourname.netlify.app,http://localhost:5173
+CORS_ORIGIN=https://yourname.netlify.app,http://localhost:5173,http://127.0.0.1:5173
 AIHUB_DATA_DIR=D:\THEUX_AI_DATA
 MINIMAX_API_KEY=
 
