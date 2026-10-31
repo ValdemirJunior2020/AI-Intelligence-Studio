@@ -137,3 +137,7 @@ The updated INSTALL-LOCAL-VIDEO.bat provisions Python 3.12 with winget and an is
 
 ### Video installer v3 (October 31, 2026)
 The current installer banner is `THEUX AMD VIDEO AUTO INSTALLER v3 - NOT CPU PRECHECK`. If the window still says `THEUX LOCAL VIDEO - AMD GPU PRECHECK`, you are running an old local file. The new script uses AMD's documented `pip -f` repository-based ROCm wheel resolution and Python 3.12 in an isolated venv. It does not install flash_attn and leaves the global Python 3.11 unchanged. Successful installation still does not establish that the upstream Wan generation code runs on native Windows AMD without additional compatibility work.
+
+
+### Windows AMD FSDP import workaround
+Windows ROCm PyTorch wheels can lack `torch._C._distributed_c10d`. For single-GPU Wan2.1 text-to-video, the backend now automatically applies `server/patch-wan-amd.py` before launching the model. The patch backs up two original upstream files (`wan/__init__.py` and `wan/distributed/fsdp.py`) with `.theux-original` suffix. It disables unsupported FSDP sharding and avoids importing unrelated image/video variants; it does not alter PyTorch, download packages or claim to enable unsupported AMD kernels. Multi-GPU generation is intentionally unsupported. If a new error appears, check the new per-job logs.

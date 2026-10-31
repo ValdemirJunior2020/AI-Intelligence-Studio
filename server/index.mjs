@@ -8,7 +8,7 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import {spawn} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { clean, safeName, snippets, passwordHash, passwordVerify } from './lib.mjs';
 import { studios, groups } from './catalog.mjs';
@@ -257,6 +257,16 @@ app.post('/api/local-video',auth,(req,res)=>{
  };
  db.videos.push(item);save();
  const args=['generate.py','--task','t2v-1.3B','--size',ratio==='9:16'?'480*832':'832*480','--ckpt_dir',wanModel,'--prompt',prompt,'--offload_model','True','--t5_cpu','--sample_shift','8','--sample_guide_scale','6','--save_file',output];
+ const patchScript=path.resolve(path.join(path.dirname(fileURLToPath(import.meta.url)),'patch-wan-amd.py'));
+ if(process.platform==='win32'){
+  const preflight=spawnSync(wanPython,[patchScript,'--wan-root',wanRoot],{encoding:'utf8',timeout:30000,windowsHide:true});
+  if(preflight.error||preflight.status!==0){
+   item.status='failed';item.error='Windows single-GPU patch failed: '+(preflight.stderr||preflight.error?.message||preflight.stdout||'unknown error').slice(-1600);
+   appendLog('PREFLIGHT',item.error);save();logStream.end();
+   return failure(res,500,item.error);
+  }
+  appendLog('PREFLIGHT',preflight.stdout);
+ }
  const child=spawn(wanPython,args,{cwd:wanRoot,windowsHide:true,env:{...process.env,PYTHONUNBUFFERED:'1'}});
  activeWan={child,id:item.id};
  child.stdout.on('data',chunk=>appendLog('OUT',chunk));
