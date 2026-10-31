@@ -58,4 +58,19 @@ for relative in ["generate.py", "wan/text2video.py"]:
             print(f"Backup: {backup}")
         target.write_text(source.replace(old,new),encoding="utf-8")
         print(f"Patched single-GPU distributed check: {target}")
+# Model directly imports flash_attention, which upstream asserts is present.
+# Append an SDPA implementation only when neither FlashAttention backend exists.
+attention_file=root/"wan"/"modules"/"attention.py"
+if not attention_file.is_file():
+    raise SystemExit("Wan attention.py missing; cannot install AMD fallback.")
+attention_text=attention_file.read_text(encoding="utf-8")
+if "# THEUX_AMD_SDPA_FALLBACK_V1" not in attention_text:
+    backup=attention_file.with_name(attention_file.name+".theux-original")
+    if not backup.exists():
+        shutil.copy2(attention_file,backup)
+        print(f"Backup: {backup}")
+    attention_file.write_text(attention_text+"\n\n"+"# THEUX_AMD_SDPA_FALLBACK_V1\n# Native PyTorch scaled-dot-product attention for one GPU, no flash_attn wheels.\nif not FLASH_ATTN_2_AVAILABLE and not FLASH_ATTN_3_AVAILABLE:\n    import torch.nn.functional as F\n\n    def flash_attention(q, k, v, q_lens=None, k_lens=None, dropout_p=0.0,\n                        softmax_scale=None, q_scale=None, causal=False,\n                        window_size=(-1, -1), deterministic=False,\n                        dtype=torch.bfloat16, version=None):\n        original_dtype = q.dtype\n        if q_scale is not None:\n            q = q * q_scale\n        q = q.transpose(1, 2).to(dtype)\n        k = k.transpose(1, 2).to(dtype)\n        v = v.transpose(1, 2).to(dtype)\n        lq, lk = q.size(-2), k.size(-2)\n        mask = None\n        if q_lens is not None or k_lens is not None or window_size != (-1, -1):\n            query_positions = torch.arange(lq, device=q.device)[:, None]\n            key_positions = torch.arange(lk, device=q.device)[None, :]\n            allowed = torch.ones((q.size(0), 1, lq, lk), dtype=torch.bool, device=q.device)\n            if q_lens is not None:\n                allowed &= query_positions[None, None] < torch.as_tensor(q_lens, device=q.device).view(-1, 1, 1, 1)\n            if k_lens is not None:\n                allowed &= key_positions[None, None] < torch.as_tensor(k_lens, device=q.device).view(-1, 1, 1, 1)\n            left, right = window_size\n            if left >= 0:\n                allowed &= key_positions[None, None] >= query_positions[None, None] - left\n            if right >= 0:\n                allowed &= key_positions[None, None] <= query_positions[None, None] + right\n            if causal:\n                allowed &= key_positions[None, None] <= query_positions[None, None]\n                causal = False\n            mask = allowed\n        out = F.scaled_dot_product_attention(q, k, v, attn_mask=mask,\n                                              dropout_p=dropout_p,\n                                              is_causal=causal, scale=softmax_scale)\n        return out.transpose(1, 2).contiguous().to(original_dtype)\n"+"\n",encoding="utf-8")
+    print(f"Installed AMD PyTorch SDPA fallback: {attention_file}")
+else:
+    print(f"AMD SDPA fallback already installed: {attention_file}")
 print("Single-GPU compatibility fixes applied. GPU inference is still unverified.")
