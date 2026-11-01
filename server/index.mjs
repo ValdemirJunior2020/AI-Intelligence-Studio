@@ -353,7 +353,12 @@ async function longNarration(item){
  return scenes.map((p,i)=>'As the story continues, '+p.replace(/Scene \d+ of \d+[^.]*\./,'').slice(0,150)+'.').join(' ').slice(0,5500);
 }
 async function finishAudioAutomatically(item,authorization){
- const base='http://127.0.0.1:'+port,headers={Authorization:authorization,'Content-Type':'application/json'};
+ // Multi-scene rendering can outlive the original 12-hour login session.
+ // Mint a short-lived internal token for this video's actual owner only.
+ const owner=db.users.find(u=>u.id===item.owner);
+ if(!owner)throw Error('Video owner no longer exists');
+ const temporaryToken=tokenFor(owner);
+ const base='http://127.0.0.1:'+port,headers={Authorization:'Bearer '+temporaryToken,'Content-Type':'application/json'};
  const request=async(endpoint,body)=>{
   const response=await fetch(base+endpoint,{method:'POST',headers,body:JSON.stringify(body)});
   if(!response.ok)throw Error((await response.text()).slice(0,350));
@@ -399,6 +404,8 @@ app.post('/api/local-video',auth,(req,res)=>{
  const targetSeconds=[120,180,300].includes(Number(req.body?.targetSeconds))?Number(req.body.targetSeconds):0;
  const item={narrationConfig,autoAudioStatus:'waiting-for-video',id:id(),owner:req.user.id,engine:'local',model:'Wan2.1-T2V-1.3B',prompt,ratio,status:'running',logs:[],createdAt:new Date().toISOString(),stage:'Starting video engine',stepsDone:0,stepsTotal:20,progress:null};
  if(targetSeconds){
+  // Reserve the local GPU before scheduling the long-form worker.
+  activeWan={id:item.id,child:null};
   item.targetSeconds=targetSeconds;item.sceneCount=targetSeconds/10;item.currentScene=0;
   item.stage='Preparing '+item.sceneCount+' scene movie';db.videos.push(item);save();
   setImmediate(()=>buildLongVideo(item,renderAuthorization));
