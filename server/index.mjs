@@ -1,3 +1,4 @@
+import {installLocalAudio} from './audio.mjs';
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -329,6 +330,7 @@ app.post('/api/local-video',auth,(req,res)=>{
  });
  res.status(202).json(item);
 });
+installLocalAudio(app,{auth,db,home,save,failure});
 app.get('/api/local-video/combined-logs',auth,(req,res)=>{
  const jobs=db.videos.filter(v=>v.owner===req.user.id&&v.engine==='local').sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)));
  const chunks=['THEUX AI - COMBINED LOCAL VIDEO LOG','Exported: '+new Date().toISOString(),'Jobs: '+jobs.length,'='.repeat(72)];
