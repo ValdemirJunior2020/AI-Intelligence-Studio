@@ -367,7 +367,7 @@ export function installAudioStudio(app,{auth,db,home,save,failure}){
   if(process.platform!=='win32')return failure(res,409,'Local narration currently supports Windows voices.');
   if(v.studio?.narrationStatus==='running')return failure(res,409,'Narration already running');
   if(!usable(ffmpeg))return failure(res,409,'FFmpeg missing. Run INSTALL-LOCAL-AUDIO.bat.');
-  const text=String(req.body?.text||('This video shows '+String(v.prompt||'a scene').replace(/[.!?]+$/,'')+'.')).replace(/[\r\n]+/g,' ').trim().slice(0,2000);
+  const text=String(req.body?.text||('This video shows '+String(v.prompt||'a scene').replace(/[.!?]+$/,'')+'.')).replace(/[\r\n]+/g,' ').trim().slice(0,6000);
   if(!text)return failure(res,400,'Enter a narration script.');
   const voice=String(req.body?.voice||'').slice(0,100);
   const engine=req.body?.engine==='chatterbox'?'chatterbox':'windows';

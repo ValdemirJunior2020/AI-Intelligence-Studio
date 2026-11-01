@@ -339,6 +339,19 @@ function narrationScript(prompt){
  if(m)return m[1];
  return 'In this scene, '+p.replace(/\b(?:add|include|with)\s+(?:a\s+)?(?:narrator|voice[ -]?over)\b/ig,'').replace(/\s+/g,' ').slice(0,500).replace(/[.!?]*$/,'')+'.';
 }
+async function longNarration(item){
+ if(!item.targetSeconds)return narrationScript(item.prompt);
+ const exact=String(item.prompt).match(/(?:narrator|voice[ -]?over|narration)\s*(?:says?|reads?|:)?\s*["“]([^"”]{4,5500})["”]/i);
+ if(exact)return exact[1];
+ const words=Math.round(item.targetSeconds*1.75);
+ const task='Write a coherent English documentary voice-over for a '+item.targetSeconds+'-second movie, around '+words+' spoken words. Describe this story and its developing visual scenes realistically, without asserting details not in the brief. Narration only, no labels or timestamps. Story: '+item.prompt;
+ try{
+  const out=await ollama('/api/generate',{model:process.env.THEUX_NARRATION_MODEL||'qwen3:8b',prompt:task,stream:false,options:{num_predict:Math.min(1300,Math.max(350,Math.ceil(words*1.6)))}});
+  if(typeof out.response==='string'&&out.response.trim().split(/\s+/).length>40)return out.response.trim().slice(0,5500);
+ }catch(e){item.autoAudioWarning='Local narration script generation unavailable; using storyboard narration: '+e.message;save()}
+ const scenes=longScenePrompts(item.prompt,item.sceneCount);
+ return scenes.map((p,i)=>'As the story continues, '+p.replace(/Scene \d+ of \d+[^.]*\./,'').slice(0,150)+'.').join(' ').slice(0,5500);
+}
 async function finishAudioAutomatically(item,authorization){
  const base='http://127.0.0.1:'+port,headers={Authorization:authorization,'Content-Type':'application/json'};
  const request=async(endpoint,body)=>{
@@ -363,8 +376,9 @@ async function finishAudioAutomatically(item,authorization){
  if(item.narrationConfig?.enabled){
   try{
    track('running','Generating spoken narration');
+   const narration=await longNarration(item);item.narrationText=narration;save();
    await request(basePath+'/narrate',{
-    text:narrationScript(item.prompt),
+    text:narration,
     engine:item.narrationConfig.engine,
     style:item.narrationConfig.style,
     speed:item.narrationConfig.speed
