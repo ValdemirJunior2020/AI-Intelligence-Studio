@@ -15,7 +15,7 @@ export default function AudioStudio({video,call,onError,onReload}){
  const [notice,setNotice]=useState('');
  const read=useCallback(async()=>{try{const x=await call('/api/audio-studio/'+video.id);setStudio(x);if(!dirty)setCues(x.cues||[])}catch(e){setNotice(e.message)}},[call,video.id,dirty]);
  useEffect(()=>{read();call('/api/audio-studio/status').then(x=>{setAvailable(x);setModel(m=>m||x.visionModel)}).catch(()=>{})},[video.id,call]);
- useEffect(()=>{if(!['analyzing','matching','rendering','automatic'].includes(studio.status))return;
+ useEffect(()=>{if(!['analyzing','matching','rendering','automatic'].includes(studio.status)&&studio.narrationStatus!=='running')return;
   const t=setInterval(()=>call('/api/audio-studio/'+video.id).then(x=>{setStudio(x);if(x.status==='ready'||x.status==='completed'||x.status==='failed'){setCues(x.cues||[]);setDirty(false);onReload?.()}}).catch(()=>{}),3000);
   return()=>clearInterval(t);
  },[studio.status,video.id,call,onReload]);
