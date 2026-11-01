@@ -14,7 +14,7 @@ export default function AudioStudio({video,call,onError,onReload}){
  const [notice,setNotice]=useState('');
  const read=useCallback(async()=>{try{const x=await call('/api/audio-studio/'+video.id);setStudio(x);if(!dirty)setCues(x.cues||[])}catch(e){setNotice(e.message)}},[call,video.id,dirty]);
  useEffect(()=>{read();call('/api/audio-studio/status').then(x=>{setAvailable(x);setModel(m=>m||x.visionModel)}).catch(()=>{})},[video.id,call]);
- useEffect(()=>{if(!['analyzing','matching','rendering'].includes(studio.status))return;
+ useEffect(()=>{if(!['analyzing','matching','rendering','automatic'].includes(studio.status))return;
   const t=setInterval(()=>call('/api/audio-studio/'+video.id).then(x=>{setStudio(x);if(x.status==='ready'||x.status==='completed'||x.status==='failed'){setCues(x.cues||[]);setDirty(false);onReload?.()}}).catch(()=>{}),3000);
   return()=>clearInterval(t);
  },[studio.status,video.id,call,onReload]);
@@ -26,7 +26,7 @@ export default function AudioStudio({video,call,onError,onReload}){
  const getBank=()=>act(async()=>{const x=await call('/api/audio-studio/bank');setBank(x.ids||[]);if(!x.ids?.length)setNotice('Earshot bank returned no sounds. Run the local audio installer.')});
  const download=async(suffix,name)=>act(async()=>{const blob=await call('/api/audio-studio/'+video.id+'/'+suffix,'GET',undefined,true);const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)});
  const edit=(id,key,value)=>{setCues(old=>old.map(c=>c.id===id?{...c,[key]:value,...(key==='sourceType'?{approved:false,candidateId:'',sfxId:''}:{})}:c));setDirty(true)};
- const working=['analyzing','matching','rendering'].includes(studio.status);
+ const working=['analyzing','matching','rendering','automatic'].includes(studio.status);
  const ready=studio.status==='ready';
  const duration=Number(studio.duration)||2.1;
  const picked=cues.filter(c=>c.sourceType!=='none').length;
@@ -44,7 +44,7 @@ export default function AudioStudio({video,call,onError,onReload}){
   </div>
   {available&&(!available.ffmpeg||!available.ffprobe)&&<div className="sound-studio__warning"><AlertCircle size={16}/> FFmpeg / FFprobe missing. Run <b>INSTALL-LOCAL-AUDIO.bat</b> from your project folder.</div>}
   {!available?.earshot&&<div className="sound-studio__hint">Real Sound and Earshot bank effects require a one-time free installation: <b>INSTALL-LOCAL-AUDIO.bat</b>. This installs a separate CPU environment and does not modify the AMD video environment.</div>}
-  <div className="sound-studio__actions">
+  <div className="sound-studio__actions"><button className="sound-studio__btn sound-studio__btn--primary" disabled={busy||working||studio.status==='completed'} onClick={()=>act(async()=>{await call('/api/audio-studio/'+video.id+'/auto','POST',{});setStudio(s=>({...s,status:'automatic',stage:'Auto-detecting and mixing sounds'}))})}><WandSparkles size={15}/> Auto soundtrack — one click</button>
    <label className="sound-studio__model"><input type="checkbox" checked={vision} onChange={e=>setVision(e.target.checked)}/> Analyze sampled video frames using local Ollama</label>
    {vision&&<input aria-label="Local vision model" className="sound-studio__model-input" placeholder="Local Ollama vision model" value={model} onChange={e=>setModel(e.target.value)}/>}
    <button disabled={busy||working} className="sound-studio__btn sound-studio__btn--primary" onClick={()=>analyze(vision)}><WandSparkles size={15}/> {cues.length?'Re-analyze video':'Detect scenes'}</button>

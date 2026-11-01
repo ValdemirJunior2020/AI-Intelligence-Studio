@@ -253,6 +253,50 @@ export function installAudioStudio(app,{auth,db,home,save,failure}){
    origin:'manual',description:'User-created sound cue'});
   save();res.json(v.studio);
  });
+ app.post('/api/audio-studio/:id/auto',auth,(req,res)=>{
+  let v;try{v=ensure(req)}catch(e){return failure(res,404,e.message)}
+  if(['analyzing','matching','rendering','automatic'].includes(v.studio?.status))return failure(res,409,'Audio Studio is already processing this video');
+  if(!usable(ffmpeg)||!usable(probe))return failure(res,409,'FFmpeg and FFprobe required: run INSTALL-LOCAL-AUDIO.bat.');
+  v.studio={status:'automatic',stage:'Analyzing video for automatic soundtrack',cues:[],error:'',auto:true};save();
+  res.status(202).json({status:'automatic'});
+  (async()=>{
+    const source=path.join(outputDir,v.id+'.mp4'),{duration,fps}=await getDuration(source);
+    v.studio.duration=duration;v.studio.fps=fps;
+    // Images cannot establish exact impact moments; inferred cues are intentionally approximate.
+    let cues=[];const model=process.env.THEUX_VISION_MODEL||'qwen3.5:9b';
+    try{
+      for(const portion of [.2,.55,.8]){
+        progress(v,'Checking picture at '+Math.round(portion*100)+'%');
+        const shot=await frameBuffer(source,Math.max(.05,duration*portion));
+        const cue=await visionCue(shot,model,duration*portion);
+        if(cue)cues.push({...cue,id:randomUUID(),gain:.72,sourceType:'none'});
+      }
+    }catch(e){v.studio.visionNotice='Vision unavailable: '+tail(e.message)+'. Using prompt-based sound cues.'}
+    if(!cues.length)cues=starterCues(v.prompt,duration);
+    v.studio.cues=cues;
+    const assets=[],credits=[],work=path.join(outputDir,'studio',v.id);fs.mkdirSync(path.join(work,'assets'),{recursive:true});
+    for(let i=0;i<cues.length;i++){
+      const c=cues[i];progress(v,'Finding public-domain audio '+(i+1)+'/'+cues.length);
+      const results=await openverse(c.query);
+      const choice=results.find(x=>['cc0','pdm'].includes(x.license));
+      if(!choice)continue;
+      const file=path.join(work,'assets','automatic-'+i+'.audio');
+      try{await downloadSound(choice.url,file)}catch{continue}
+      c.sourceType='openverse';c.candidateId=choice.id;c.approved=true;c.candidates=[choice];
+      assets.push({file,at:c.at,gain:c.gain,query:c.query});
+      credits.push({title:choice.title,creator:choice.creator,license:choice.license,licenseUrl:choice.licenseUrl,sourceUrl:choice.sourceUrl,attribution:choice.attribution});
+    }
+    if(!assets.length)throw Error('No usable CC0/public-domain audio found. Use manual timeline or try another sound description.');
+    progress(v,'Mixing synchronized soundtrack');
+    const target=path.join(outputDir,v.id+'-studio.mp4');
+    // Mix locally even when Earshot is unavailable. Original MP4 remains intact.
+    await mixWithFfmpeg(source,assets,duration,target,work);
+    if(!fs.existsSync(target)||fs.statSync(target).size<1024)throw Error('Audio MP4 not produced');
+    v.studio.output=path.basename(target);v.studio.credits=credits;v.studio.mixer='Automatic Openverse + FFmpeg';v.studio.status='completed';v.studio.stage='Video with audio ready';
+    fs.writeFileSync(path.join(work,'CREDITS.txt'),credits.map(c=>[c.title,'Creator: '+c.creator,'License: '+c.license,'License URL: '+(c.licenseUrl||''),'Source: '+(c.sourceUrl||''),'Attribution: '+(c.attribution||'')].join('\n')).join('\n\n'),'utf8');
+    save();
+  })().catch(e=>{v.studio.status='failed';v.studio.error=e.message;v.studio.stage='Automatic audio failed';save()});
+ });
  app.post('/api/audio-studio/:id/render',auth,(req,res)=>{
   let v;try{v=ensure(req)}catch(e){return failure(res,404,e.message)}
   if(v.studio?.status!=='ready')return failure(res,409,'Analyze and save cues first');
