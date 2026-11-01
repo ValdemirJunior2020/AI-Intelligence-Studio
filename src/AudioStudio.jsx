@@ -18,7 +18,7 @@ export default function AudioStudio({video,call,onError,onReload}){
  useEffect(()=>{if(!['analyzing','matching','rendering','automatic'].includes(studio.status)&&studio.narrationStatus!=='running')return;
   const t=setInterval(()=>call('/api/audio-studio/'+video.id).then(x=>{setStudio(x);if(x.status==='ready'||x.status==='completed'||x.status==='failed'){setCues(x.cues||[]);setDirty(false);onReload?.()}}).catch(()=>{}),3000);
   return()=>clearInterval(t);
- },[studio.status,video.id,call,onReload]);
+ },[studio.status,studio.narrationStatus,video.id,call,onReload]);
  const act=async(fn)=>{setBusy(true);setNotice('');try{await fn()}catch(e){setNotice(e.message);onError?.(e)}finally{setBusy(false)}};
  const analyze=(useVision)=>act(async()=>{await call('/api/audio-studio/'+video.id+'/analyze','POST',{vision:useVision,model});setStudio(s=>({...s,status:'analyzing',stage:'Analyzing video'}));setDirty(false)});
  const match=()=>act(async()=>{if(dirty)await save();await call('/api/audio-studio/'+video.id+'/match','POST',{});setStudio(s=>({...s,status:'matching',stage:'Searching Openverse'}))});
