@@ -373,6 +373,32 @@ app.post('/api/local-video/:id/stop',auth,(req,res)=>{
  if(!v||v.status!=='running'||activeWan?.id!==v.id)return failure(res,409,'Video not running');
  v.status='cancelled';activeWan.child.kill();save();res.json({ok:true});
 });
+// Long-form export is an explicitly labeled loop of the completed clip, not new Wan-generated action.
+app.post('/api/local-video/:id/extend',auth,(req,res)=>{
+ const v=db.videos.find(x=>x.id===req.params.id&&x.owner===req.user.id&&x.engine==='local'&&x.status==='completed');
+ if(!v)return failure(res,404,'Completed clip required');
+ const seconds=Number(req.body?.seconds);
+ if(![120,180,300].includes(seconds))return failure(res,400,'Choose 2, 3, or 5 minutes');
+ if(v.extendStatus==='running')return failure(res,409,'Long-form export already running');
+ const original=path.join(home,'videos',v.id+'.mp4'),target=path.join(home,'videos',v.id+'-'+seconds+'s-loop.mp4');
+ if(!fs.existsSync(original))return failure(res,404,'Video file not available');
+ v.extendStatus='running';v.extendSeconds=seconds;v.extendError='';save();
+ const args=['-hide_banner','-nostdin','-y','-stream_loop','-1','-i',original,'-t',String(seconds),'-map','0:v:0','-an','-c:v','libx264','-preset','veryfast','-pix_fmt','yuv420p','-movflags','+faststart',target];
+ const child=spawn(process.env.FFMPEG_PATH||'ffmpeg',args,{windowsHide:true,stdio:['ignore','ignore','pipe']});
+ let stderr='';child.stderr.on('data',d=>stderr=(stderr+String(d)).slice(-3000));
+ child.on('error',e=>{v.extendStatus='failed';v.extendError=e.message;save()});
+ child.on('close',code=>{if(v.extendStatus==='failed')return;
+  if(code===0&&fs.existsSync(target)&&fs.statSync(target).size>1024){v.extendStatus='completed';v.extendFile=path.basename(target)}
+  else {v.extendStatus='failed';v.extendError=stderr.slice(-500)||'Export failed'}
+  save();
+ });
+ res.status(202).json({status:'running',seconds,notice:'This repeats the original short clip; it does not generate new scenes.'});
+});
+app.get('/api/local-video/:id/extended-download',auth,(req,res)=>{
+ const v=db.videos.find(x=>x.id===req.params.id&&x.owner===req.user.id&&x.engine==='local'&&x.status==='completed'&&x.extendStatus==='completed');
+ if(!v||!v.extendFile)return failure(res,404,'Extended MP4 not ready');
+ res.download(path.join(home,'videos',path.basename(v.extendFile)),'theux-'+v.extendSeconds+'s-loop.mp4');
+});
 app.get('/api/local-video/:id/download',auth,(req,res)=>{
  const v=db.videos.find(v=>v.id===req.params.id&&v.owner===req.user.id&&v.engine==='local'&&v.status==='completed');
  if(!v)return failure(res,404,'Video not available');
