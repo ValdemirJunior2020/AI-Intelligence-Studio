@@ -355,6 +355,13 @@ export function installAudioStudio(app,{auth,db,home,save,failure}){
    v.studio.status='completed';v.studio.stage='Video with soundtrack ready';save();
   })().catch(e=>{v.studio.status='failed';v.studio.error=e.message;v.studio.stage='Audio rendering failed';save()});
  });
+ app.get('/api/audio-studio/voices/status',auth,async(_req,res)=>{
+  let chatterbox=false;
+  try{const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),2500);try{
+   const r=await fetch('http://127.0.0.1:8001/health',{signal:ctl.signal});chatterbox=r.ok;
+  }finally{clearTimeout(timer)}}catch{}
+  res.json({chatterbox,windows:process.platform==='win32',styles:['documentary','calm','warm','inspirational','emotional','dramatic','sermon']});
+ });
  app.post('/api/audio-studio/:id/narrate',auth,(req,res)=>{
   let v;try{v=ensure(req)}catch(e){return failure(res,404,e.message)}
   if(process.platform!=='win32')return failure(res,409,'Local narration currently supports Windows voices.');
@@ -363,6 +370,10 @@ export function installAudioStudio(app,{auth,db,home,save,failure}){
   const text=String(req.body?.text||('This video shows '+String(v.prompt||'a scene').replace(/[.!?]+$/,'')+'.')).replace(/[\r\n]+/g,' ').trim().slice(0,2000);
   if(!text)return failure(res,400,'Enter a narration script.');
   const voice=String(req.body?.voice||'').slice(0,100);
+  const engine=req.body?.engine==='chatterbox'?'chatterbox':'windows';
+  const style=['calm','documentary','warm','inspirational','emotional','dramatic','sermon'].includes(req.body?.style)?req.body.style:'documentary';
+  const speed=Number(req.body?.speed);
+  const pacing=Number.isFinite(speed)?clamp(speed,.65,1.3):.9;
   const work=path.join(outputDir,'studio',v.id);fs.mkdirSync(work,{recursive:true});
   const scriptFile=path.join(work,'narration.txt'),wav=path.join(work,'narration.wav');
   const original=path.join(outputDir,v.id+'.mp4'),final=path.join(outputDir,v.id+'-narrated.mp4');
@@ -372,7 +383,29 @@ export function installAudioStudio(app,{auth,db,home,save,failure}){
   v.studio={...(v.studio||{}),narrationStatus:'running',narrationError:'',narrationText:text,narrationStage:'Synthesizing speech'};save();res.status(202).json({status:'running'});
   (async()=>{
    const script=path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/(?:[A-Za-z]:)/,x=>x.slice(1))),'narrate-windows.ps1');
-   await run('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,'-TextFile',scriptFile,'-WavFile',wav,'-Voice',voice],{timeoutMs:180000});
+   if(engine==='chatterbox'){
+    // MoneyPrinterJunior Chatterbox service: local-only, separate CPU process. No API key.
+    const base=process.env.THEUX_CHATTERBOX_URL||'http://127.0.0.1:8001';
+    const endpoint=new URL('/synthesize',base);
+    if(!['127.0.0.1','localhost','::1','[::1]'].includes(endpoint.hostname))throw Error('Chatterbox must run on this computer (loopback only).');
+    const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),600000);
+    try{
+     const reply=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,style}),signal:ctl.signal});
+     if(!reply.ok)throw Error('Chatterbox HTTP '+reply.status+': '+(await reply.text()).slice(0,250));
+     const bytes=Buffer.from(await reply.arrayBuffer());
+     if(bytes.length<512||bytes.toString('ascii',0,4)!=='RIFF')throw Error('Chatterbox did not return valid WAV');
+     fs.writeFileSync(wav,bytes);
+    }finally{clearTimeout(timer)}
+   }else{
+    await run('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,'-TextFile',scriptFile,'-WavFile',wav,'-Voice',voice],{timeoutMs:180000});
+   }
+   if(Math.abs(pacing-1)>.001){
+    const paced=path.join(work,'narration-paced.wav');
+    await run(ffmpeg,['-hide_banner','-nostdin','-y','-i',wav,'-filter:a','atempo='+pacing.toFixed(2),'-c:a','pcm_s16le',paced],{timeoutMs:180000});
+    if(!fs.existsSync(paced)||fs.statSync(paced).size<512)throw Error('Narration pacing failed');
+    fs.renameSync(paced,wav);
+   }
+   v.studio.narrationEngine=engine;v.studio.narrationStyle=style;v.studio.narrationSpeed=pacing;save();
    v.studio.narrationStage='Mixing speech into MP4';save();
    // Keep existing soundtrack when present; duck it so voice can be heard clearly.
    const hasSound=Boolean(v.studio.output&&input!==original);

@@ -5,6 +5,8 @@ import './audio-studio.css';
 export default function AudioStudio({video,call,onError,onReload}){
  const [studio,setStudio]=useState({status:'new',cues:[]});
  const [narrationText,setNarrationText]=useState('');
+ const [narratorEngine,setNarratorEngine]=useState('windows'),[narratorStyle,setNarratorStyle]=useState('documentary'),[narratorSpeed,setNarratorSpeed]=useState(.9),[voiceStatus,setVoiceStatus]=useState(null);
+ useEffect(()=>{call('/api/audio-studio/voices/status').then(setVoiceStatus).catch(()=>{})},[call]);
  const [cues,setCues]=useState([]);
  const [available,setAvailable]=useState(null);
  const [bank,setBank]=useState([]);
@@ -86,9 +88,13 @@ export default function AudioStudio({video,call,onError,onReload}){
   </div>}
   {working&&<div className="sound-studio__processing"><RefreshCw size={17}/> Working on {studio.stage?.toLowerCase()||'audio'}. Your original MP4 is preserved.</div>}
   <div className="sound-studio__delivery" style={{display:'block',marginTop:14}}>
-   <h3>Voice-over Narrator</h3><p>Give your movie a spoken description using a free local Windows voice. Speech is generated from the script below, not invented from the silent video.</p>
+   <h3>Voice-over Narrator</h3><div className="sound-studio__fields">
+ <label>Voice engine<select value={narratorEngine} onChange={e=>setNarratorEngine(e.target.value)}><option value="windows">Windows local voice</option><option value="chatterbox">MoneyPrinterJunior Chatterbox {voiceStatus?.chatterbox?'(online)':'(service required)'}</option></select></label>
+ <label>Narration style<select value={narratorStyle} onChange={e=>setNarratorStyle(e.target.value)}>{['documentary','calm','warm','inspirational','emotional','dramatic','sermon'].map(s=><option key={s} value={s}>{s}</option>)}</select></label>
+ <label>Speed<select value={narratorSpeed} onChange={e=>setNarratorSpeed(Number(e.target.value))}><option value={.74}>Slow cinematic (0.74×)</option><option value={.9}>Relaxed (0.9×)</option><option value={1}>Normal (1×)</option><option value={1.15}>Fast (1.15×)</option></select></label>
+ </div><small>Expressive styles work with Chatterbox; Windows voices use the selected speed but not Chatterbox emotion profiles.</small><p>Give your movie a spoken description using a free local Windows voice. Speech is generated from the script below, not invented from the silent video.</p>
    <textarea aria-label="Narration script" rows={3} style={{width:'100%',padding:10,borderRadius:8}} value={narrationText} placeholder={studio.narrationText||'This video shows '+video.prompt+'.'} onChange={e=>setNarrationText(e.target.value)}/>
-   <button className="sound-studio__btn sound-studio__btn--primary" disabled={busy||studio.narrationStatus==='running'} onClick={()=>act(async()=>{await call('/api/audio-studio/'+video.id+'/narrate','POST',{text:narrationText||studio.narrationText||'This video shows '+video.prompt+'.'});setStudio(v=>({...v,narrationStatus:'running',narrationStage:'Generating narration'}))})}>Narrate this video</button>
+   <button className="sound-studio__btn sound-studio__btn--primary" disabled={busy||studio.narrationStatus==='running'} onClick={()=>act(async()=>{await call('/api/audio-studio/'+video.id+'/narrate','POST',{text:narrationText||studio.narrationText||'This video shows '+video.prompt+'.',engine:narratorEngine,style:narratorStyle,speed:narratorSpeed});setStudio(v=>({...v,narrationStatus:'running',narrationStage:'Generating narration'}))})}>Narrate this video</button>
    {studio.narrationStatus==='running'&&<small>{studio.narrationStage||'Creating spoken audio...'}</small>}
    {studio.narrationStatus==='failed'&&<p className="sound-studio__warning">{studio.narrationError}</p>}
    {studio.narrationStatus==='completed'&&<button className="sound-studio__btn" onClick={()=>download('narration-download','theux-narrated-video.mp4')}>Download narrated MP4</button>}
