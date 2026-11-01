@@ -245,7 +245,13 @@ save();
 function wanReady(){return fs.existsSync(path.join(wanRoot,'generate.py'))&&fs.existsSync(path.join(wanModel,'config.json'))}
 app.get('/api/local-video/status',auth,(_req,res)=>res.json({configured:wanReady(),active:!!activeWan,model:'Wan2.1 T2V 1.3B'}));
 // Clean workspace: only current jobs and successful results; historical failures remain in combined logs.
-app.get('/api/local-video',auth,(req,res)=>res.json(db.videos.filter(v=>v.owner===req.user.id&&v.engine==='local'&&['running','completed'].includes(v.status)&&!v.archived).slice(-20).reverse()));
+app.get('/api/local-video',auth,(req,res)=>res.json(db.videos.filter(v=>v.owner===req.user.id&&v.engine==='local'&&['running','completed'].includes(v.status)&&!v.archived).slice(-20).reverse().map(v=>{
+ if(v.status!=='running')return v;
+ const now=Date.now(),last=v.lastActivityAt||Date.parse(v.createdAt)||now;
+ const silenceMinutes=Math.floor(Math.max(0,now-last)/60000);
+ const denoisingDone=v.stepsTotal>0&&v.stepsDone>=v.stepsTotal;
+ return {...v,live:{processRunning:activeWan?.id===v.id&&activeWan.child.exitCode===null,processId:activeWan?.id===v.id?activeWan.child.pid:null,minutesWithoutOutput:silenceMinutes,awaitingMp4:denoisingDone,mp4Saved:fs.existsSync(path.join(home,'videos',v.id+'.mp4')),attention:silenceMinutes>=15?'No output for '+silenceMinutes+' minutes. The video may still be decoding; do not restart until the process exits or reports an error.':null}};
+})));
 app.get('/api/local-video/history',auth,(req,res)=>res.json(db.videos.filter(v=>v.owner===req.user.id&&v.engine==='local'&&!['running','completed'].includes(v.status)).slice(-50).reverse()));
 app.post('/api/local-video/clear-errors',auth,(req,res)=>{
  let count=0;
@@ -268,12 +274,14 @@ app.post('/api/local-video',auth,(req,res)=>{
  let pendingSave=null;
  const updateProgress=(chunk)=>{
   const value=String(chunk);
+  if(value.trim())item.lastActivityAt=Date.now();
   if(/Creating WanT2V pipeline/i.test(value))item.stage='Initializing model';
   if(/loading .*models_t5/i.test(value))item.stage='Loading text encoder';
   if(/loading .*Wan2.1_VAE/i.test(value))item.stage='Loading video decoder';
   if(/Creating WanModel/i.test(value))item.stage='Loading video model';
   if(/Generating video/i.test(value)){item.stage='Generating video frames';item.generationStartedAt=Date.now();item.progress=0}
-  if(/Saving generated video|Saving video|saving.*mp4/i.test(value))item.stage='Encoding MP4';
+  if(/Saving generated video|Saving video|saving.*mp4/i.test(value)){item.stage='Encoding MP4';item.lastActivityAt=Date.now()}
+  if(/decode|decoding/i.test(value)){item.stage='Decoding video frames';item.lastActivityAt=Date.now()}
   // tqdm emits carriage returns, and individual writes can split a progress row.
   const combined=(item.progressTail||'')+value;
   const matches=[...combined.matchAll(/(\d{1,3})%\|[^\r\n]*?\|\s*(\d+)\/(\d+)\s*\[/g)];
@@ -281,7 +289,9 @@ app.post('/api/local-video',auth,(req,res)=>{
    const last=matches[matches.length-1],done=Number(last[2]),total=Number(last[3]);
    if(total>0&&done>=0&&done<=total){
     item.stepsDone=done;item.stepsTotal=total;item.progress=Math.round(done/total*100);
-    item.stage='Generating video frames';
+    item.lastStepAt=Date.now();item.lastActivityAt=Date.now();
+    item.stage=done===total?'Denoising complete — decoding video (MP4 not saved yet)':'Generating video frames';
+    if(done===total){item.denoiseCompletedAt=Date.now();item.etaSeconds=null;}
     if(done>0&&item.generationStartedAt){
      const elapsed=(Date.now()-item.generationStartedAt)/1000;
      item.etaSeconds=Math.max(0,Math.ceil(elapsed/done*(total-done)));
@@ -314,7 +324,7 @@ app.post('/api/local-video',auth,(req,res)=>{
   appendLog('PREFLIGHT',preflight.stdout);
  }
  const child=spawn(wanPython,args,{cwd:wanRoot,windowsHide:true,env:{...process.env,PYTHONUNBUFFERED:'1',PYTHONIOENCODING:'utf-8',PYTHONUTF8:'1'}});
- activeWan={child,id:item.id};
+ activeWan={child,id:item.id};item.processId=child.pid;item.lastActivityAt=Date.now();save();
  child.stdout.on('data',chunk=>appendLog('OUT',chunk));
  child.stderr.on('data',chunk=>appendLog('ERR',chunk));
  child.on('error',e=>{appendLog('SPAWN ERROR',e.stack||e.message);item.status='failed';item.error=e.message;activeWan=null;if(pendingSave)clearTimeout(pendingSave);pendingSave=null;save();logStream.end()});
