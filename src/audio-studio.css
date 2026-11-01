@@ -1,0 +1,40 @@
+.sound-studio{margin:16px 0;padding:20px;border:1px solid rgba(176,195,220,.28);border-radius:18px;background:linear-gradient(145deg,#172332,#0b111d 70%);color:#eaf1f9;box-shadow:0 12px 35px rgba(0,0,0,.24)}
+.sound-studio__head{display:flex;align-items:center;gap:13px;flex-wrap:wrap}
+.sound-studio__mark{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,#d8e3ed,#7a8b9f 65%,#354455);color:#15202c}
+.sound-studio__head h3{font-size:20px;margin:2px 0 3px;color:#f4f7fa}.sound-studio__head p{font-size:12px;color:#acb9c8;margin:0}
+.sound-studio__eyebrow{letter-spacing:2px;color:#93a8bc;font-size:9px;font-weight:700}
+.sound-studio__status{margin-left:auto;border:1px solid #47627c;color:#c0d4e5;border-radius:30px;padding:7px 12px;font-size:11px;background:#1a2938}
+.sound-studio__status--done{border-color:#378c75;color:#a0ebd1}
+.sound-studio__engines{display:flex;flex-wrap:wrap;gap:7px;margin:17px 0}.sound-studio__engines span{display:flex;align-items:center;gap:5px;border-radius:6px;background:#1c2a39;padding:7px 9px;color:#b8d0e3;font-size:11px}
+.sound-studio__warning{border:1px solid #bb7455;background:rgba(158,83,50,.15);border-radius:9px;padding:10px;margin:9px 0;color:#ffdbbe;display:flex;align-items:center;gap:9px;overflow-wrap:anywhere;font-size:12px}
+.sound-studio__hint{font-size:11px;color:#acb9c8;margin-bottom:12px}
+.sound-studio__actions,.sound-studio__toolbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.sound-studio__actions{padding:14px 0;border-top:1px solid #354558}
+.sound-studio__model{display:flex;align-items:center;gap:6px;font-size:12px;max-width:250px}.sound-studio__model-input{min-width:150px;max-width:190px}
+.sound-studio input:not([type=checkbox]),.sound-studio select{border:1px solid #45586f;background:#0b1623;color:#eff6ff;min-height:34px;border-radius:7px;padding:7px 10px;width:100%;box-sizing:border-box;font-size:12px}
+.sound-studio input[type=checkbox]{accent-color:#b9d2e7}
+.sound-studio input:disabled,.sound-studio select:disabled{opacity:.66}
+.sound-studio__btn{position:relative;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px 12px!important;border:1px solid #5c6f84!important;border-radius:8px!important;color:#e7eef6!important;background:linear-gradient(125deg,#36495b,#1d2936)!important;cursor:pointer;font-size:12px!important;min-height:35px}
+.sound-studio__btn--primary{background:linear-gradient(120deg,#e6edf4,#9cafc4 42%,#70849a 65%,#d7e2ef)!important;color:#102235!important;border-color:#a9baca!important;font-weight:700}
+.sound-studio__btn--primary:before{content:"";position:absolute;top:0;bottom:0;left:-60%;width:35%;transform:skewX(-22deg);background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);transition:left .6s}
+.sound-studio__btn--primary:hover:before{left:130%}.sound-studio__btn:disabled{opacity:.45;cursor:default}
+.sound-studio__stage{font-size:12px;color:#bed4e6;padding:8px 0;display:flex;gap:9px;align-items:center}.sound-studio__pulse{width:8px;height:8px;background:#80c8eb;border-radius:100%;box-shadow:0 0 0 6px #80c8eb22;animation:studioPulse 1.5s infinite}@keyframes studioPulse{50%{opacity:.25}}
+.sound-studio__section-title{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:5px;font-size:14px}.sound-studio__section-title span{display:flex;align-items:center;gap:8px}.sound-studio__section-title small,.sound-studio__fine{color:#93a8bc;font-size:11px}
+.sound-studio__timeline{border:1px solid #384b60;border-radius:13px;background:#101b29;padding:15px;margin-top:14px}
+.sound-studio__ruler{height:65px;position:relative;margin:26px 8px 10px;border-radius:9px;background:repeating-linear-gradient(90deg,#263748 0,#263748 1px,transparent 1px,transparent 12.5%),linear-gradient(#1b3044,#10202f);border:1px solid #3d556e}
+.sound-studio__ruler>span{position:absolute;top:-20px;color:#9cb1c4;font-size:10px;transform:translateX(-30%)}
+.sound-studio__tick{position:absolute;top:12px;bottom:11px;width:8px;background:linear-gradient(#dce6ef,#91a6ba);border-radius:9px;transform:translateX(-50%);box-shadow:0 0 9px #b4d4ee88}
+.sound-studio__tick span{position:absolute;top:-8px;left:-7px;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#b7c8d7;color:#132538;font-size:10px;font-weight:bold}
+.sound-studio__tick--empty{opacity:.4}.sound-studio__cues{display:grid;gap:10px}
+.sound-studio__cue{border:1px solid #33465a;background:#172638;border-radius:10px;padding:12px}
+.sound-studio__cue-header{display:flex;gap:12px;align-items:center;margin-bottom:10px}.sound-studio__cue-header b{font-size:12px}.sound-studio__cue-header small{color:#8fa8bd;font-size:10px}
+.sound-studio__fields{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:8px 0}
+.sound-studio__fields label{display:flex;flex-direction:column;gap:4px;min-width:100px;font-size:10px;color:#a8c2d6;flex:0 0 100px}
+.sound-studio__fields label.sound-studio__grow{flex:1 1 200px}
+.sound-studio__license{display:flex;justify-content:space-between;flex-wrap:wrap;gap:9px;font-size:11px;color:#c4d4e1}.sound-studio__license label{display:flex;gap:5px;align-items:center}
+.sound-studio a{color:#b7d7f2;text-decoration:underline}
+.sound-studio__toolbar{border-top:1px solid #33465a;margin-top:14px;padding-top:14px}
+.sound-studio__processing{padding:12px;margin-top:14px;background:#162f43;color:#c8e6f5;border-radius:8px;display:flex;gap:10px;align-items:center;font-size:12px}
+.sound-studio__delivery{border:1px solid #40866e;background:#0b312a;padding:14px;border-radius:10px;margin-top:14px;display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.sound-studio__delivery>div{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.sound-studio__delivery small{color:#b4d6ca;font-size:10px}
+@media(max-width:600px){.sound-studio{padding:12px}.sound-studio__head h3{font-size:17px}.sound-studio__status{margin-left:0}.sound-studio__btn{width:auto}.sound-studio__fields label{flex:1 1 130px}.sound-studio__model-input{max-width:100%}}
+@media(prefers-reduced-motion:reduce){.sound-studio__btn--primary:before,.sound-studio__pulse{animation:none;transition:none}}
