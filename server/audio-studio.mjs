@@ -244,6 +244,15 @@ export function installAudioStudio(app,{auth,db,home,save,failure}){
   try{v.studio.cues=validateCues(req.body?.cues,v.studio.cues,v.studio.duration);save();res.json(v.studio)}
   catch(e){failure(res,400,e.message)}
  });
+ app.post('/api/audio-studio/:id/add-cue',auth,(req,res)=>{
+  let v;try{v=ensure(req)}catch(e){return failure(res,404,e.message)}
+  if(v.studio?.status!=='ready')return failure(res,409,'Finish analyzing before editing');
+  if(v.studio.cues.length>=12)return failure(res,400,'12 cues maximum');
+  v.studio.cues.push({id:randomUUID(),at:timeSec(req.body?.at??v.studio.duration*.5,v.studio.duration),
+   query:cleanSound(req.body?.query||'footsteps'),gain:.75,sourceType:'none',candidateId:'',sfxId:'',approved:false,
+   origin:'manual',description:'User-created sound cue'});
+  save();res.json(v.studio);
+ });
  app.post('/api/audio-studio/:id/render',auth,(req,res)=>{
   let v;try{v=ensure(req)}catch(e){return failure(res,404,e.message)}
   if(v.studio?.status!=='ready')return failure(res,409,'Analyze and save cues first');
@@ -273,6 +282,17 @@ export function installAudioStudio(app,{auth,db,home,save,failure}){
      if(!/^[a-z0-9_-]+\/[a-z0-9_.-]+$/i.test(c.sfxId))throw Error('Invalid Earshot bank ID');
      await run(python,['-m','earshot','sfx','render',c.sfxId,'-o',file],{cwd:root,timeoutMs:120000});
      credits.push({title:'Earshot bank: '+c.sfxId,creator:'Earshot',license:'MIT (code-generated sound)',sourceUrl:'https://github.com/Leonxlnx/earshot'});
+    }
+    // Earshot matches the actual recording to the desired cue, not merely a title.
+    // Report QA failures separately so sound export is not destroyed.
+    if(c.sourceType==='openverse'&&fs.existsSync(python)){
+     progress(v,'Earshot checking sound '+(i+1)+'/'+cues.length);
+     if(!Array.isArray(v.studio.soundReviews))v.studio.soundReviews=[];
+     try{
+      const match=await run(python,['-m','earshot','match',file,c.query,'--json'],{cwd:root,timeoutMs:210000});
+      v.studio.soundReviews.push({scene:c.id,query:c.query,result:match.stdout.slice(-2400)});
+     }catch(e){v.studio.soundReviews.push({scene:c.id,query:c.query,error:tail(e.message)})}
+     save();
     }
     assets.push({file,at:c.at,gain:c.gain,query:c.query});
    }

@@ -42,6 +42,8 @@ if errorlevel 1 goto failed
 echo Installing Earshot, Real Sound mixer requirements, and audio QA tools...
 "%PY%" -m pip install -e "%AUDIO%\repo" pyloudnorm
 if errorlevel 1 goto failed
+"%PY%" -m earshot doctor --fetch
+if errorlevel 1 goto failed
 "%PY%" -m earshot doctor
 if errorlevel 1 goto failed
 echo.
