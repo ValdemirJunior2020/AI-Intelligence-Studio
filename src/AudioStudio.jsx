@@ -4,6 +4,7 @@ import './audio-studio.css';
 
 export default function AudioStudio({video,call,onError,onReload}){
  const [studio,setStudio]=useState({status:'new',cues:[]});
+ const [narrationText,setNarrationText]=useState('');
  const [cues,setCues]=useState([]);
  const [available,setAvailable]=useState(null);
  const [bank,setBank]=useState([]);
@@ -84,6 +85,14 @@ export default function AudioStudio({video,call,onError,onReload}){
    </div>
   </div>}
   {working&&<div className="sound-studio__processing"><RefreshCw size={17}/> Working on {studio.stage?.toLowerCase()||'audio'}. Your original MP4 is preserved.</div>}
+  <div className="sound-studio__delivery" style={{display:'block',marginTop:14}}>
+   <h3>Voice-over Narrator</h3><p>Give your movie a spoken description using a free local Windows voice. Speech is generated from the script below, not invented from the silent video.</p>
+   <textarea aria-label="Narration script" rows={3} style={{width:'100%',padding:10,borderRadius:8}} value={narrationText} placeholder={studio.narrationText||'This video shows '+video.prompt+'.'} onChange={e=>setNarrationText(e.target.value)}/>
+   <button className="sound-studio__btn sound-studio__btn--primary" disabled={busy||studio.narrationStatus==='running'} onClick={()=>act(async()=>{await call('/api/audio-studio/'+video.id+'/narrate','POST',{text:narrationText||studio.narrationText||'This video shows '+video.prompt+'.'});setStudio(v=>({...v,narrationStatus:'running',narrationStage:'Generating narration'}))})}>Narrate this video</button>
+   {studio.narrationStatus==='running'&&<small>{studio.narrationStage||'Creating spoken audio...'}</small>}
+   {studio.narrationStatus==='failed'&&<p className="sound-studio__warning">{studio.narrationError}</p>}
+   {studio.narrationStatus==='completed'&&<button className="sound-studio__btn" onClick={()=>download('narration-download','theux-narrated-video.mp4')}>Download narrated MP4</button>}
+  </div>
   {studio.status==='completed'&&<div className="sound-studio__delivery">
    <div><CheckCircle2 size={22}/><b>Soundtrack is ready</b><small>{studio.mixer||'Sound mixer'} · separate MP4 · original preserved</small></div>
    <div><button className="sound-studio__btn sound-studio__btn--primary" onClick={()=>download('download','theux-studio-with-audio.mp4')}><Download size={15}/> Download video + audio</button><button className="sound-studio__btn" onClick={()=>download('credits','theux-sound-credits.txt')}>Download credits</button></div>

@@ -355,6 +355,39 @@ export function installAudioStudio(app,{auth,db,home,save,failure}){
    v.studio.status='completed';v.studio.stage='Video with soundtrack ready';save();
   })().catch(e=>{v.studio.status='failed';v.studio.error=e.message;v.studio.stage='Audio rendering failed';save()});
  });
+ app.post('/api/audio-studio/:id/narrate',auth,(req,res)=>{
+  let v;try{v=ensure(req)}catch(e){return failure(res,404,e.message)}
+  if(process.platform!=='win32')return failure(res,409,'Local narration currently supports Windows voices.');
+  if(v.studio?.narrationStatus==='running')return failure(res,409,'Narration already running');
+  if(!usable(ffmpeg))return failure(res,409,'FFmpeg missing. Run INSTALL-LOCAL-AUDIO.bat.');
+  const text=String(req.body?.text||('This video shows '+String(v.prompt||'a scene').replace(/[.!?]+$/,'')+'.')).replace(/[\r\n]+/g,' ').trim().slice(0,2000);
+  if(!text)return failure(res,400,'Enter a narration script.');
+  const voice=String(req.body?.voice||'').slice(0,100);
+  const work=path.join(outputDir,'studio',v.id);fs.mkdirSync(work,{recursive:true});
+  const scriptFile=path.join(work,'narration.txt'),wav=path.join(work,'narration.wav');
+  const original=path.join(outputDir,v.id+'.mp4'),final=path.join(outputDir,v.id+'-narrated.mp4');
+  const withSfx=v.studio?.status==='completed'&&v.studio.output?path.join(outputDir,path.basename(v.studio.output)):original;
+  const input=fs.existsSync(withSfx)?withSfx:original;
+  fs.writeFileSync(scriptFile,text,'utf8');
+  v.studio={...(v.studio||{}),narrationStatus:'running',narrationError:'',narrationText:text,narrationStage:'Synthesizing speech'};save();res.status(202).json({status:'running'});
+  (async()=>{
+   const script=path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/(?:[A-Za-z]:)/,x=>x.slice(1))),'narrate-windows.ps1');
+   await run('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,'-TextFile',scriptFile,'-WavFile',wav,'-Voice',voice],{timeoutMs:180000});
+   v.studio.narrationStage='Mixing speech into MP4';save();
+   // Keep existing soundtrack when present; duck it so voice can be heard clearly.
+   const hasSound=Boolean(v.studio.output&&input!==original);
+   const args=hasSound?['-hide_banner','-nostdin','-y','-i',input,'-i',wav,'-filter_complex','[0:a]volume=0.25[bed];[1:a]volume=1.0[voice];[bed][voice]amix=inputs=2:duration=first:dropout_transition=0[a]','-map','0:v:0','-map','[a]','-c:v','copy','-c:a','aac','-b:a','160k','-movflags','+faststart',final]:
+    ['-hide_banner','-nostdin','-y','-i',original,'-i',wav,'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','160k','-af','apad','-shortest','-movflags','+faststart',final];
+   await run(ffmpeg,args,{timeoutMs:240000});
+   if(!fs.existsSync(final)||fs.statSync(final).size<1024)throw Error('Narrated MP4 was not saved');
+   v.studio.narrationStatus='completed';v.studio.narrationStage='Narrated video ready';v.studio.narrationOutput=path.basename(final);save();
+  })().catch(e=>{v.studio.narrationStatus='failed';v.studio.narrationError=e.message;save()});
+ });
+ app.get('/api/audio-studio/:id/narration-download',auth,(req,res)=>{
+  let v;try{v=ensure(req)}catch(e){return failure(res,404,e.message)}
+  if(v.studio?.narrationStatus!=='completed'||!v.studio.narrationOutput)return failure(res,404,'Narration MP4 not ready');
+  res.download(path.join(outputDir,path.basename(v.studio.narrationOutput)),'theux-narrated-video.mp4');
+ });
  app.get('/api/audio-studio/:id/download',auth,(req,res)=>{
   let v;try{v=ensure(req)}catch(e){return failure(res,404,e.message)}
   if(v.studio?.status!=='completed'||!v.studio.output)return failure(res,404,'Audio video not ready');
