@@ -260,12 +260,62 @@ app.post('/api/local-video/clear-errors',auth,(req,res)=>{
  }
  save();res.json({ok:true,archived:count,message:'Old errors hidden. Diagnostics retained in the combined log.'});
 });
+
+// Narration is opt-in from the prompt. Avoid triggering on "no narration" instructions.
+function requestedNarration(prompt){
+ const p=String(prompt||'');
+ return !/\b(no|without|exclude|omit)\s+(?:any\s+)?(?:narration|narrator|voice[ -]?over|spoken words|speech)\b/i.test(p)&&/\b(narrat(?:e|ion|or)|voice[ -]?over|spoken commentary|speaks?|says?|dialogue)\b/i.test(p);
+}
+function narrationScript(prompt){
+ const p=String(prompt||'').trim();
+ const m=p.match(/(?:narrator|voice[ -]?over|narration)\s*(?:says?|reads?|:)?\s*["“]([^"”]{4,1000})["”]/i);
+ if(m)return m[1];
+ return 'In this scene, '+p.replace(/\b(?:add|include|with)\s+(?:a\s+)?(?:narrator|voice[ -]?over)\b/ig,'').replace(/\s+/g,' ').slice(0,500).replace(/[.!?]*$/,'')+'.';
+}
+async function finishAudioAutomatically(item,authorization){
+ const base='http://127.0.0.1:'+port,headers={Authorization:authorization,'Content-Type':'application/json'};
+ const request=async(endpoint,body)=>{
+  const response=await fetch(base+endpoint,{method:'POST',headers,body:JSON.stringify(body)});
+  if(!response.ok)throw Error((await response.text()).slice(0,350));
+ };
+ const track=(status,stage,error='')=>{item.autoAudioStatus=status;item.autoAudioStage=stage;item.autoAudioError=error;save()};
+ const basePath='/api/audio-studio/'+encodeURIComponent(item.id);
+ try{
+  track('running','Searching and placing sound effects');
+  await request(basePath+'/auto',{});
+  const deadline=Date.now()+12*60*1000;
+  while(Date.now()<deadline){
+   await new Promise(resolve=>setTimeout(resolve,4000));
+   const state=item.studio?.status;
+   if(['completed','failed','interrupted'].includes(state))break;
+  }
+  if(item.studio?.status!=='completed'){
+   item.autoAudioWarning=item.studio?.error||'Sound effects unavailable; continuing with narration';
+  }
+ }catch(e){item.autoAudioWarning='Automatic sound effects: '+e.message}
+ if(item.narrationConfig?.enabled){
+  try{
+   track('running','Generating spoken narration');
+   await request(basePath+'/narrate',{
+    text:narrationScript(item.prompt),
+    engine:item.narrationConfig.engine,
+    style:item.narrationConfig.style,
+    speed:item.narrationConfig.speed
+   });
+   track('running','Mixing voice with the video');
+  }catch(e){track('failed','Narration failed',e.message);return}
+ }else track(item.studio?.status==='completed'?'completed':'failed','Soundtrack processing finished',item.autoAudioWarning||'');
+}
 app.post('/api/local-video',auth,(req,res)=>{
  if(!wanReady())return failure(res,409,'Install the local video engine using INSTALL-LOCAL-VIDEO.bat and restart the backend.');
  if(activeWan)return failure(res,409,'A local video is already generating.');
  const prompt=clean(req.body.prompt,1000),ratio=req.body.ratio==='9:16'?'9:16':'16:9';
  if(!prompt)return failure(res,400,'Enter a video prompt');
- const item={id:id(),owner:req.user.id,engine:'local',model:'Wan2.1-T2V-1.3B',prompt,ratio,status:'running',logs:[],createdAt:new Date().toISOString(),stage:'Starting video engine',stepsDone:0,stepsTotal:20,progress:null};
+ const narrationEnabled=requestedNarration(prompt);
+ const voiceChoice=req.body?.narration||{};
+ const narrationConfig={enabled:narrationEnabled,engine:voiceChoice.engine==='chatterbox'?'chatterbox':'windows',style:['calm','documentary','warm','inspirational','emotional','dramatic','sermon'].includes(voiceChoice.style)?voiceChoice.style:'documentary',speed:[.74,.9,1,1.15].includes(Number(voiceChoice.speed))?Number(voiceChoice.speed):.9};
+ const renderAuthorization=req.headers.authorization||'';
+ const item={narrationConfig,autoAudioStatus:'waiting-for-video',id:id(),owner:req.user.id,engine:'local',model:'Wan2.1-T2V-1.3B',prompt,ratio,status:'running',logs:[],createdAt:new Date().toISOString(),stage:'Starting video engine',stepsDone:0,stepsTotal:20,progress:null};
  const folder=path.join(home,'videos');fs.mkdirSync(folder,{recursive:true});
  const output=path.join(folder,item.id+'.mp4');
  const logFile=path.join(folder,item.id+'.log');
@@ -331,6 +381,7 @@ app.post('/api/local-video',auth,(req,res)=>{
  child.on('close',code=>{
   if(item.status!=='cancelled'){item.status=code===0&&fs.existsSync(output)?'completed':'failed';if(item.status==='failed')item.error='Video engine exit code '+code+'; inspect logs for ROCm/PyTorch issues.';}
   if(item.status==='completed'){item.progress=100;item.stage='Complete';item.etaSeconds=0}
+  if(item.status==='completed')setImmediate(()=>finishAudioAutomatically(item,renderAuthorization).catch(e=>{item.autoAudioStatus='failed';item.autoAudioError=e.message;save()}));
   else if(item.status==='failed')item.stage='Failed';
   appendLog('EXIT','process exited with code '+code);
   if(item.status==='failed'){
