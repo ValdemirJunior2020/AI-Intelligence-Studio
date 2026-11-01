@@ -62,7 +62,7 @@ export default function AudioStudio({video,call,onError,onReload}){
    </div>
    <div className="sound-studio__cues">
     {cues.map((c,i)=><div key={c.id} className="sound-studio__cue">
-     <div className="sound-studio__cue-header"><b>Scene {i+1}</b><small>{c.origin==='vision-inferred'?'Frame-inferred sound':c.origin==='prompt-inferred'?'Prompt-inferred sound':'Manual sound cue'}</small></div>
+     <div className="sound-studio__cue-header"><b>Scene {i+1}</b><small>{c.origin==='vision-inferred'?'Frame-inferred sound':c.origin==='prompt-inferred'?'Prompt-inferred sound':'Manual sound cue'}</small><button className="sound-studio__mini" disabled={!ready||busy} onClick={()=>{setCues(old=>old.filter(x=>x.id!==c.id));setDirty(true)}}>Remove cue</button></div>
      <div className="sound-studio__fields">
       <label>Time (seconds)<input type="number" min="0" max={duration} step=".05" value={c.at} disabled={!ready||busy} onChange={e=>edit(c.id,'at',e.target.value)}/></label>
       <label className="sound-studio__grow">Sound search / description<input maxLength="120" value={c.query} disabled={!ready||busy} onChange={e=>edit(c.id,'query',e.target.value)}/></label>
@@ -76,7 +76,7 @@ export default function AudioStudio({video,call,onError,onReload}){
      {c.sourceType==='openverse'&&(()=>{const s=(c.candidates||[]).find(x=>x.id===c.candidateId);return <div className="sound-studio__license">{s&&<small><a href={s.sourceUrl||s.licenseUrl} target="_blank" rel="noreferrer">Review source and license</a> · {s.license.toUpperCase()} · {s.creator}</small>}<label><input type="checkbox" checked={!!c.approved} disabled={!ready||busy||!s} onChange={e=>edit(c.id,'approved',e.target.checked)}/> I verified the original audio license and will include its credits</label></div>})()}
     </div>)}
    </div>
-   <div className="sound-studio__toolbar">
+   <div className="sound-studio__toolbar"><button disabled={!ready||busy||dirty||cues.length>=12} className="sound-studio__btn" onClick={()=>act(async()=>{const x=await call('/api/audio-studio/'+video.id+'/add-cue','POST',{at:duration/2});setStudio(x);setCues(x.cues||[])})}>+ Add sound cue</button>
     <button disabled={!ready||busy} className="sound-studio__btn" onClick={()=>act(save)}><CheckCircle2 size={15}/> Save timeline {dirty?'•':''}</button>
     <button disabled={!ready||busy} className="sound-studio__btn" onClick={match}><Search size={15}/> Find licensed sounds</button>
     <button disabled={!ready||busy} className="sound-studio__btn" onClick={getBank}><AudioLines size={15}/> Browse Earshot bank</button>
@@ -88,6 +88,7 @@ export default function AudioStudio({video,call,onError,onReload}){
    <div><CheckCircle2 size={22}/><b>Soundtrack is ready</b><small>{studio.mixer||'Sound mixer'} · separate MP4 · original preserved</small></div>
    <div><button className="sound-studio__btn sound-studio__btn--primary" onClick={()=>download('download','theux-studio-with-audio.mp4')}><Download size={15}/> Download video + audio</button><button className="sound-studio__btn" onClick={()=>download('credits','theux-sound-credits.txt')}>Download credits</button></div>
   </div>}
+  {studio.soundReviews?.length>0&&<details className="sound-studio__reviews"><summary>Earshot sound-match verification ({studio.soundReviews.length})</summary>{studio.soundReviews.map((x,i)=><pre key={i}>{x.error||x.result}</pre>)}</details>}
   <p className="sound-studio__fine">Video-frame analysis suggests sounds; it cannot detect exact impacts or speech from silent frames. Adjust timestamps before exporting. Openverse hosts and licenses must be reviewed before publication.</p>
  </section>;
 }

@@ -38,3 +38,6 @@
 .sound-studio__delivery>div{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.sound-studio__delivery small{color:#b4d6ca;font-size:10px}
 @media(max-width:600px){.sound-studio{padding:12px}.sound-studio__head h3{font-size:17px}.sound-studio__status{margin-left:0}.sound-studio__btn{width:auto}.sound-studio__fields label{flex:1 1 130px}.sound-studio__model-input{max-width:100%}}
 @media(prefers-reduced-motion:reduce){.sound-studio__btn--primary:before,.sound-studio__pulse{animation:none;transition:none}}
+
+.sound-studio__mini{margin-left:auto!important;border:1px solid #445b70!important;background:#202f41!important;color:#e0eaf3!important;padding:4px 8px!important;font-size:10px!important;border-radius:7px!important;cursor:pointer}.sound-studio__mini:disabled{opacity:.4}
+.sound-studio__reviews{margin-top:13px;border:1px solid #40586f;border-radius:8px;padding:10px;color:#c0d6e9;font-size:11px}.sound-studio__reviews summary{cursor:pointer}.sound-studio__reviews pre{max-height:150px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-size:10px;color:#b6cada}
