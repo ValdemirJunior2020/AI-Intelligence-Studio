@@ -141,6 +141,15 @@ export function installOpuscar(app,{auth,db,home,save,failure}){
   })().catch(e=>{j.status=controller.signal.aborted?'cancelled':'failed';j.error=String(e.message||e).slice(0,900);log('Stopped: '+j.error)}).finally(()=>{running.delete(j.id);save()});
  });
  app.post('/api/opuscar/:id/stop',auth,(req,res)=>{const j=own(req);if(!j)return failure(res,404,'Video not found');const c=running.get(j.id);if(!c)return failure(res,409,'Job not running');c.abort();res.json({ok:true})});
- app.post('/api/opuscar/:id/retry',auth,(req,res)=>{const j=own(req);if(!j)return failure(res,404,'Video not found');if(!['failed','cancelled','interrupted'].includes(j.status))return failure(res,409,'Only stopped or failed jobs can be retried');return failure(res,409,'Use Generate with the previous prompt and settings to retry safely')});
+ app.post('/api/opuscar/:id/retry',auth,async(req,res)=>{
+  const j=own(req);if(!j)return failure(res,404,'Video not found');
+  if(!['failed','cancelled','interrupted'].includes(j.status))return failure(res,409,'Only stopped or failed jobs can be retried');
+  // Re-enter the same authenticated creation route rather than executing stale code.
+  try{
+   const url='http://127.0.0.1:'+(process.env.PORT||4317)+'/api/opuscar/generate';
+   const reply=await fetch(url,{method:'POST',headers:{Authorization:req.headers.authorization||'','Content-Type':'application/json'},body:JSON.stringify({prompt:j.prompt,model:j.model,duration:j.duration,ratio:j.ratio,style:j.style})});
+   const body=await reply.json();return res.status(reply.status).json(body);
+  }catch(e){return failure(res,502,'Retry request failed: '+e.message)}
+ });
  app.get('/api/opuscar/:id/download',auth,(req,res)=>{const j=own(req);if(!j||j.status!=='completed'||!j.output)return failure(res,404,'Completed MP4 not found');const p=path.join(outputDir,path.basename(j.output));if(!fs.existsSync(p))return failure(res,404,'MP4 missing');res.download(p,'theux-opuscar-'+j.id+'.mp4')});
 }

@@ -1,10 +1,10 @@
 import React,{useCallback,useEffect,useState} from 'react';
 const dur=[8,15,30,60,120,180,300];
 export default function OpuscarStudio({call,onError}){
- const [status,setStatus]=useState(null),[jobs,setJobs]=useState([]),[prompt,setPrompt]=useState('A glowing futuristic city comes alive as orbiting neon shapes and light trails reveal an inspiring story.'),[model,setModel]=useState(''),[duration,setDuration]=useState(8),[ratio,setRatio]=useState('16:9'),[style,setStyle]=useState('cinematic'),[busy,setBusy]=useState(false),[preview,setPreview]=useState(null);
+ const [previewId,setPreviewId]=useState(''),[previewUrl,setPreviewUrl]=useState(''),[status,setStatus]=useState(null),[jobs,setJobs]=useState([]),[prompt,setPrompt]=useState('A glowing futuristic city comes alive as orbiting neon shapes and light trails reveal an inspiring story.'),[model,setModel]=useState(''),[duration,setDuration]=useState(8),[ratio,setRatio]=useState('16:9'),[style,setStyle]=useState('cinematic'),[busy,setBusy]=useState(false),[preview,setPreview]=useState(null);
  const refresh=useCallback(async()=>{const [a,b]=await Promise.allSettled([call('/api/opuscar/status'),call('/api/opuscar/jobs')]);if(a.status==='fulfilled'){setStatus(a.value);setModel(old=>a.value.models.includes(old)?old:(a.value.models.find(m=>/coder|qwen/i.test(m))||a.value.models[0]||''))}if(b.status==='fulfilled')setJobs(b.value)},[call]);
  useEffect(()=>{refresh();const t=setInterval(refresh,3000);return()=>clearInterval(t)},[refresh]);
- useEffect(()=>{if(!preview)return;let active=true,url='';call('/api/opuscar/'+preview+'/download','GET',undefined,true).then(blob=>{url=URL.createObjectURL(blob);if(active)setPreview({id:preview,url})}).catch(onError);return()=>{active=false;if(url)URL.revokeObjectURL(url)}},[typeof preview==='string'?preview:'',call]);
+ useEffect(()=>{if(!previewId)return;let active=true,url='';call('/api/opuscar/'+previewId+'/download','GET',undefined,true).then(blob=>{url=URL.createObjectURL(blob);if(active)setPreviewUrl(url);else URL.revokeObjectURL(url)}).catch(onError);return()=>{active=false;if(url)URL.revokeObjectURL(url)}},[previewId,call]);
  const act=async(fn)=>{setBusy(true);try{await fn();await refresh()}catch(e){onError?.(e)}finally{setBusy(false)}};
  const download=async(j)=>{const blob=await call('/api/opuscar/'+j.id+'/download','GET',undefined,true),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='lemo-'+j.id+'.mp4';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000)};
  return <div className="panel" style={{marginTop:14,border:'1px solid #483266',borderRadius:14,padding:16}}>
@@ -25,10 +25,10 @@ export default function OpuscarStudio({call,onError}){
    {j.error&&<p className="error">{j.error}</p>}
    <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
    {j.status==='running'&&<button className="text-button" onClick={()=>act(()=>call('/api/opuscar/'+j.id+'/stop','POST',{}))}>Stop</button>}
-   {['cancelled','failed','interrupted'].includes(j.status)&&<button className="text-button" onClick={()=>act(()=>call('/api/opuscar/generate','POST',{prompt:j.prompt,model:j.model,duration:j.duration,ratio:j.ratio,style:j.style}))}>Retry</button>}
-   {j.status==='completed'&&<><button className="text-button" onClick={()=>setPreview(j.id)}>Preview</button><button className="text-button" onClick={()=>act(()=>download(j))}>Download MP4</button></>}
+   {['cancelled','failed','interrupted'].includes(j.status)&&<button className="text-button" onClick={()=>act(()=>call('/api/opuscar/'+j.id+'/retry','POST',{}))}>Retry</button>}
+   {j.status==='completed'&&<><button className="text-button" onClick={()=>setPreviewId(j.id)}>Preview</button><button className="text-button" onClick={()=>act(()=>download(j))}>Download MP4</button></>}
    </div>
-   {preview?.id===j.id&&<video controls playsInline src={preview.url} style={{display:'block',width:'100%',maxHeight:430,marginTop:10,borderRadius:10}}/>}
+   {previewId===j.id&&previewUrl&&<video controls playsInline src={previewUrl} style={{display:'block',width:'100%',maxHeight:430,marginTop:10,borderRadius:10}}/>}
    <details><summary>Generation logs</summary><pre style={{maxHeight:200,overflow:'auto',whiteSpace:'pre-wrap'}}>{(j.logs||[]).join('\n')}</pre></details>
   </div>)}
  </div>
