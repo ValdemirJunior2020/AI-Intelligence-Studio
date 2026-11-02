@@ -42,6 +42,21 @@ if not exist ".env" (
 echo [4/6] Installing/checking Node dependencies...
 call npm install --no-audit --no-fund
 if errorlevel 1 goto :failed
+echo Checking Lemo-Opuscar local browser...
+node -e "const p=require('playwright'),f=require('fs');process.exit(f.existsSync(p.chromium.executablePath())?0:1)" >nul 2>&1
+if errorlevel 1 (
+ echo Installing Playwright Chromium locally...
+ call npx playwright install chromium
+ if errorlevel 1 echo Warning: Chromium install failed. Check INSTALL-LOCAL-OPUSCAR.bat logs.
+)
+where ffmpeg >nul 2>&1
+if errorlevel 1 (
+ echo FFmpeg missing - attempting free Windows installation...
+ where winget >nul 2>&1
+ if not errorlevel 1 winget install --id Gyan.FFmpeg --exact --accept-package-agreements --accept-source-agreements
+ echo If FFmpeg was installed, reopen THEUX after Windows PATH refreshes.
+)
+
 where ollama >nul 2>&1
 if errorlevel 1 (
  echo [5/6] Installing Ollama via winget...
